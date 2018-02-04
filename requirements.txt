@@ -1,3 +1,4 @@
 tox
+pudb
 #-e git://github.com/vrthra/bytevm#egg=bytevm
 -e ../bytevm

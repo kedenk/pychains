@@ -1,0 +1,2 @@
+tox
+-e git://github.com/vrthra/bytevm#egg=bytevm

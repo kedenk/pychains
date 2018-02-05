@@ -12,12 +12,9 @@ import string
 import sys
 import argparse
 import logging
-import queue
-import string
 import bytevm.execfile as bex
 import bytevm.pyvm2 as pvm
 import enum
-
 
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
@@ -27,13 +24,6 @@ class Matched(enum.Enum):
     Last = enum.auto()
     String = enum.auto()
     Char = enum.auto()
-
-
-def check(r1, r):
-    if r:
-        return not r1
-    else:
-        return r1
 
 String_List = list(string.printable + string.whitespace)
 
@@ -45,14 +35,6 @@ class ExecFile(bex.ExecFile):
             if opA == '':
                 # it is because we successfully matched the first char.
                 return (True, opA)
-            elif len(opA) > 1:
-                # this is a string comparison. #TODO
-                prefix = os.path.commonprefix([opA, opB])
-                # verify that the common prefix ends with self.next_char
-                assert prefix[-1] == self.next_char
-                # return the char just after.
-                return opB[len(prefix)]
-            #assert opA == sys.argv[1][-1] # the first time.
         cmp_char = opA
         return (False, cmp_char)
 
@@ -61,8 +43,7 @@ class ExecFile(bex.ExecFile):
 
     def get_comparisons_on_last_char(self, cmp_traces):
         """
-        The idea is to get a list of all comparisons made to the
-        last character.
+        The idea is to get a list of all comparisons made to the last character.
         """
         last_cmp = cmp_traces[-1]
         op, oargs, result, line = last_cmp
@@ -75,8 +56,6 @@ class ExecFile(bex.ExecFile):
 
         if self.is_string(last_char):
             # if it is actually a string rather than a character,
-            common = os.path.commonprefix([last_char, cmp_args])
-            assert last_char[len(common)] == self.next_char
             return (Matched.String, [(op, oargs, result, line)], [], [])
 
         matched_last_char, cmp_char = self.get_cmp_char(oargs, last=True)
@@ -85,9 +64,6 @@ class ExecFile(bex.ExecFile):
         # we are past the end.
         if matched_last_char:
             return (Matched.Last, [], [], [])
-
-        # if last_char != self.next_char:
-        #    pudb.set_trace()
 
         # If the last character was matched successfully, we may need
         # to save and incorporate that in the update_char filter
@@ -121,7 +97,7 @@ class ExecFile(bex.ExecFile):
 
         return new_matches, l
 
-    def apply_filter(self, f_cmps, s_cmps):
+    def produce_filtered_values(self, f_cmps, s_cmps):
         # we have a list of comparisons made to the last character.
         # Choose a random comparison, and then choose a random character
         # that satisfies that comparison.
@@ -142,7 +118,6 @@ class ExecFile(bex.ExecFile):
         return random.choice(updates)
 
 
-
     def exec_code_object(self, code, env):
         for i in range(0, MaxIter):
             vm = TrackerVM()
@@ -152,6 +127,11 @@ class ExecFile(bex.ExecFile):
                 print("Result: %s" % sys.argv)
                 return res
             except Exception as e:
+                # TODO: As of now, we assume that the character we appended:
+                # the update_char actually is sufficient to get us through this
+                # character check. But this may not hold in every case,
+                # particularly if the character at a position has to satisfy
+                # multiple checks. This needs to be fixed later.
                 traces = vm.get_trace()
                 # we are assuming a character by character comparison.
                 # so get the comparison with the last element.
@@ -162,15 +142,15 @@ class ExecFile(bex.ExecFile):
                 elif m == Matched.String:
                     op, oargs, result, line = f_cmps[0]
                     common = os.path.commonprefix(oargs)
+                    assert oargs[0][len(common)] == self.next_char
                     arg = "%s%s" % (sys.argv[1][:-1], oargs[1][len(common):])
-                    # TODO -- should we wait for confirmation?
                 else:
                     # *_cmps contains all the comaparisons made to the last
                     # letter. Pick a random comparison made, and a random
                     # satisfying char.
                     # Assume that update_char will satisfy all comparisons made
                     # until then.
-                    update_char, l = self.apply_filter(f_cmps, s_cmps)
+                    update_char, l = self.produce_filtered_values(f_cmps, s_cmps)
                     self.next_char = random.choice(String_List)
                     arg = "%s%s%s" % (sys.argv[1][:-1], update_char, self.next_char)
                 sys.argv[1] = arg

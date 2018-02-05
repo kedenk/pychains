@@ -5,6 +5,7 @@ if os.getenv('D'):
 import random
 if os.getenv('R'):
     random.seed(int(os.getenv('R')))
+MaxIter = int(os.getenv('I')) if os.getenv('I') else 100000
 import dis
 import os.path
 import string
@@ -143,7 +144,7 @@ class ExecFile(bex.ExecFile):
 
 
     def exec_code_object(self, code, env):
-        for i in range(0, 1000):
+        for i in range(0, MaxIter):
             vm = TrackerVM()
             try:
                 print(">> %s" % sys.argv)

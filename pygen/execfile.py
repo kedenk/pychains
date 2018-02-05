@@ -85,8 +85,8 @@ class ExecFile(bex.ExecFile):
         if matched_last_char:
             return (Matched.Last, [], [], [])
 
-        assert last_char == self.next_char
-
+        # if last_char != self.next_char:
+        #    pudb.set_trace()
 
         # If the last character was matched successfully, we may need
         # to save and incorporate that in the update_char filter

@@ -121,10 +121,15 @@ class ExecFile(bex.ExecFile):
         # we have a list of comparisons made to the last character.
         # Choose a random comparison, and then choose a random character
         # that satisfies that comparison.
-        last_cmp = random.choice(f_cmps)
-        update, l = self.filter_match(last_cmp, s_cmps)
-        update_char = random.choice(update)
-        return update_char, l
+        updates = []
+        for last_cmp in f_cmps:
+            update, l = self.filter_match(last_cmp, s_cmps)
+            if update:
+                update_char = random.choice(update)
+                updates.append((update_char, l))
+        if not updates:
+            pudb.set_trace()
+        return random.choice(updates)
 
 
     def exec_code_object(self, code, env):

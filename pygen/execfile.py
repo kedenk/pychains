@@ -104,10 +104,13 @@ class ExecFile(bex.ExecFile):
         return (Matched.Char, failed_last_ops, successful_last_ops, others)
 
 
-    def filter_match(self, last_cmp, success_cmp):
+    def filter_match(self, last_cmp, success_cmp, invert=False):
         op, oargs, r, l = last_cmp
         fn = pvm.VirtualMachine.COMPARE_OPERATORS[op.value]
-        matches = [i for i in String_List if fn(i, oargs[1])]
+        if invert:
+            matches = [i for i in String_List if not fn(i, oargs[1])]
+        else:
+            matches = [i for i in String_List if fn(i, oargs[1])]
 
         # make sure that the success_cmp remain success
         new_matches = matches
@@ -127,9 +130,16 @@ class ExecFile(bex.ExecFile):
             if update:
                 update_char = random.choice(update)
                 updates.append((update_char, l))
-        if not updates:
-            pudb.set_trace()
+        if updates:
+            return random.choice(updates)
+        # try one of the successes
+        for last_cmp in s_cmps:
+            update, l = self.filter_match(last_cmp, [], invert=True)
+            if update:
+                update_char = random.choice(update)
+                updates.append((update_char, l))
         return random.choice(updates)
+
 
 
     def exec_code_object(self, code, env):

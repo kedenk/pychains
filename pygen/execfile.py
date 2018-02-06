@@ -14,6 +14,11 @@ def set_maxiter(i):
     global MaxIter
     MaxIter = i
 
+Debug=0
+def set_debug(i):
+    global Debug
+    Debug = i
+
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
 from .vm import TrackerVM, Op
@@ -24,6 +29,11 @@ class Matched(enum.Enum):
     Char = enum.auto()
 
 String_List = list(string.printable + string.whitespace)
+
+def save_trace(traces, i):
+    if Debug > 0:
+        with open('.t/trace-%d.txt' % i, 'w+') as f:
+            [print(i, file=f) for i in traces]
 
 class ExecFile(bex.ExecFile):
     def get_cmp_char(self, oargs, last = False):
@@ -115,7 +125,6 @@ class ExecFile(bex.ExecFile):
                 updates.append((update_char, l))
         return random.choice(updates)
 
-
     def exec_code_object(self, code, env):
         for i in range(0, MaxIter):
             vm = TrackerVM()
@@ -131,6 +140,7 @@ class ExecFile(bex.ExecFile):
                 # particularly if the character at a position has to satisfy
                 # multiple checks. This needs to be fixed later.
                 traces = vm.get_trace()
+                save_trace(traces, i)
                 # we are assuming a character by character comparison.
                 # so get the comparison with the last element.
                 m, f_cmps, s_cmps, o = self.get_comparisons_on_last_char(traces)

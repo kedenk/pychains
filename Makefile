@@ -8,10 +8,10 @@ extract_json: results/microjson.txt
 	@echo done $@
 
 results/%.txt: subjects/%.py | subjects
-	env R=$(R) python3 -m pygen $< $(Q)
+	env R=$(R) python3 gencmd.py $< $(Q)
 
 extract_comp_urltools:
-	python3 -m pygen src/pygen-ex/pygen_ex/urltools.py "https://www.hello.world#fragment?q1=1"
+	python3 gencmd.py src/pygen-ex/pygen_ex/urltools.py "https://www.hello.world#fragment?q1=1"
 
 subjects/%.py: | subjects
 	wget -c 'https://raw.githubusercontent.com/vrthra/pygen_ex/master/pygen_ex/microjson.py' -O $@.tmp

@@ -1,11 +1,4 @@
-import pudb;
-import os
-if os.getenv('D'):
-    pudb.set_trace()
 import random
-if os.getenv('R'):
-    random.seed(int(os.getenv('R')))
-MaxIter = int(os.getenv('I')) if os.getenv('I') else 100000
 import dis
 import os.path
 import string
@@ -15,6 +8,11 @@ import logging
 import bytevm.execfile as bex
 import bytevm.pyvm2 as pvm
 import enum
+
+MaxIter = 1000
+def set_maxiter(i):
+    global MaxIter
+    MaxIter = i
 
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 

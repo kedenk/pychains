@@ -182,7 +182,6 @@ class ExecFile(bex.ExecFile):
         # making it easy!. We start with a space
         self.next_char = random.choice(String_List)
         new_argv = [args.prog] + [self.next_char]
-        print(">> %s" % new_argv)
         if args.module:
             self.run_python_module(args.prog, new_argv)
         else:

@@ -19,16 +19,22 @@ def set_debug(i):
     global Debug
     Debug = i
 
+def log(var, i=1):
+    if Debug >= i:
+        print(var)
+
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
 from .vm import TrackerVM, Op
 from .tstr import tstr
 
-class Matched(enum.Enum):
+class EState(enum.Enum):
     Last = enum.auto()
+    EOF = enum.auto()
     String = enum.auto()
     Char = enum.auto()
     Skip = enum.auto()
+    Unknown = enum.auto()
 
 All_Characters = list(string.printable + string.whitespace)
 
@@ -98,6 +104,7 @@ class ExecFile(bex.ExecFile):
         """
         stack_size = len(cmp_stack)
         point = random.randrange(0, stack_size)
+        # point = stack_size - 1
         # now, we need to skip everything
         diverge, *satisfy = cmp_stack[point:]
         lst_solutions = All_Characters
@@ -110,31 +117,115 @@ class ExecFile(bex.ExecFile):
         lst_solutions = self.extract_solutions(elt, lst_solutions, True)
         return lst_solutions
 
-    def kind(self, t):
-        if t.opA == self.checked_char and \
-            TrackerVM.COMPARE_OPERATORS[t.opnum](t.opA, t.opB) == False:
-            return (1, Matched.Char)
-        elif Op(t.opnum) in [Op.EQ, Op.IN] and t.opA == '' and t.opB != '' and \
-            TrackerVM.COMPARE_OPERATORS[t.opnum](t.opA, t.opB) == False:
+    def is_same_op(self, a, b):
+        return a.opnum == b.opnum and a.opA == b.opA and a.opB == b.opB
+
+    def kind(self, h):
+        if h.opA == self.checked_char and \
+            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) == False:
+            return (1, EState.Char)
+        elif Op(h.opnum) in [Op.EQ, Op.IN] and h.opA == '' and h.opB != '' and \
+            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) == False:
             # if opA is empty, and it is being compared to non empty then
             # the last char added matched
-            return (1, Matched.Last)
-        elif Op(t.opnum) == Op.EQ and t.opA == '' and t.opB == ''  and \
-            TrackerVM.COMPARE_OPERATORS[t.opnum](t.opA, t.opB) == True:
-            return (2, Matched.Last)
-        elif Op(t.opnum) == Op.EQ and type(t.opB) is str and len(t.opB) > 1 and \
-            TrackerVM.COMPARE_OPERATORS[t.opnum](t.opA, t.opB) == False:
-            return (1, Matched.String)
-        elif t.opA == self.last_fix and Op(t.opnum) in [Op.IN, Op.EQ] and \
-            TrackerVM.COMPARE_OPERATORS[t.opnum](t.opA, t.opB) != self.last_result:
+            return (1, EState.EOF)
+        elif Op(h.opnum) in [Op.NE, Op.NOT_IN] and h.opA == '' and (h.opB == '' or '' in h.opB) and \
+            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) == True:
+            # if opA is empty, and it is being compared to non empty then
+            # the last char added matched
+            return (1.1, EState.EOF)
+        elif Op(h.opnum) == Op.EQ and h.opA == '' and h.opB == ''  and \
+            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) == True:
+            return (2, EState.EOF)
+        elif Op(h.opnum) == Op.EQ and type(h.opB) is str and len(h.opB) > 1 and \
+            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) == False:
+            return (1, EState.String)
+        elif h.opA == self.last_fix and Op(h.opnum) in [Op.IN, Op.EQ] and \
+            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) != self.last_result:
             # if the comparison is eq or in and it succeeded and the character
             # compared was equal to last_fix, then this is the last match.
-            return (3, Matched.Last)
-        elif t.opA == self.checked_char and Op(t.opnum) in [Op.IN, Op.EQ] and \
-            TrackerVM.COMPARE_OPERATORS[t.opnum](t.opA, t.opB) == True:
-            return (4 ,Matched.Last)
+            return (3, EState.Last)
+        elif h.opA == self.checked_char and Op(h.opnum) in [Op.IN, Op.EQ] and \
+            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) != self.last_result:
+            return (4 ,EState.EOF)
         else:
-            print(t)
+            return (0, EState.Unknown)
+
+    def on_trace(self, i, vm, traces):
+        # we are assuming a character by character comparison.
+        # so get the comparison with the last element.
+        h, *ltrace = traces
+        self.last_iter_top = h
+        self.result_of_last_op = TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB)
+
+        idx, k = self.kind(h)
+        log((i, idx, k, vm.steps), 2)
+        if k == EState.Char:
+            # This was a character comparison. So collect all
+            # comparisions made using this character. until the
+            # first comparison that was made otherwise.
+            cmp_stack, _ = self.comparisons_on_last_char(h, ltrace)
+            # Now, try to fix the last failure
+            self.next_opts = self.get_correction(cmp_stack)
+            new_char = random.choice(self.next_opts)
+            self.next_opts = [i for i in self.next_opts if i != new_char]
+            arg = "%s%s" % (sys.argv[1][:-1], new_char)
+
+            self.last_fix = new_char
+            self.checked_char = None
+            self.last_result = self.result_of_last_op
+            self.saved_last_iter_top = self.last_iter_top
+            return tstr(arg, idx=0)
+        elif k == EState.Skip:
+            # this happens when skipwhitespaces and similar are used.
+            # the parser skips whitespaces, and compares the last
+            # non-whitespace which may not be the last character inserted
+            # if we had inserted a whitespace.
+            # So the solution (for now) is to simply assume that the last
+            # character matched.
+            new_char = random.choice(All_Characters)
+            arg = "%s%s" % (sys.argv[1], new_char)
+
+            self.checked_char = new_char
+            self.last_fix = None
+            return tstr(arg, idx=0)
+        elif k == EState.String:
+            #assert h.opA == self.last_fix or h.opA == self.checked_char
+            common = os.path.commonprefix(h.oargs)
+            if self.checked_char:
+                # if checked_char is present, it means we passed through
+                # EState.EOF
+                assert h.opB[len(common)-1] == self.checked__char
+                arg = "%s%s" % (sys.argv[1], h.opB[len(common):])
+            elif self.last_fix:
+                assert h.opB[len(common)-1] == self.last_fix
+                arg = "%s%s" % (sys.argv[1], h.opB[len(common):])
+
+            self.last_fix = None
+            self.checked_char = None
+            return tstr(arg, idx=0)
+        elif k == EState.EOF:
+            new_char = random.choice(All_Characters)
+            arg = "%s%s" % (sys.argv[1], new_char)
+
+            self.checked_char = new_char
+            self.last_fix = None
+            self.last_result = self.result_of_last_op
+            self.saved_last_iter_top = self.last_iter_top
+            return tstr(arg, idx=0)
+        elif k == EState.Last:
+            # try other alternatives
+            new_char = random.choice(self.next_opts)
+            self.next_opts = [i for i in self.next_opts if i != new_char]
+
+            arg = "%s%s" % (sys.argv[1][:-1], new_char)
+
+            self.last_fix = new_char
+            self.checked_char = None
+            self.last_result = self.result_of_last_op
+            self.saved_last_iter_top = self.last_iter_top
+            return tstr(arg, idx=0)
+        else:
             assert False
 
     def exec_code_object(self, code, env):
@@ -147,82 +238,17 @@ class ExecFile(bex.ExecFile):
         for i in range(0, MaxIter):
             vm = TrackerVM()
             try:
-                print(">> %s" % sys.argv)
+                log(">> %s" % sys.argv, 0)
                 res = vm.run_code(code, f_globals=env)
-                print("Result: %s" % sys.argv)
+                log("Result: %s" % sys.argv)
                 return res
             except Exception as e:
-                # Ensure progress
                 vm_step = vm.steps
-                assert vm_step > last_vm_step
                 vm_step = last_vm_step
-                # TODO: As of now, we assume that the character we appended:
-                # the update_char actually is sufficient to get us through this
-                # character check. But this may not hold in every case,
-                # particularly if the character at a position has to satisfy
-                # multiple checks. This needs to be fixed later.
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)
                 save_trace(vm.byte_trace, i, file='byte')
-                # we are assuming a character by character comparison.
-                # so get the comparison with the last element.
-                h, *ltrace = traces
-                self.result_of_last_op = TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB)
-
-                i, k = self.kind(h)
-                print(i, k, vm.steps)
-                if k == Matched.Char:
-                    # This was a character comparison. So collect all
-                    # comparisions made using this character. until the
-                    # first comparison that was made otherwise.
-                    cmp_stack, _ = self.comparisons_on_last_char(h, ltrace)
-                    # Now, try to fix the last failure
-                    possible_new_chars = self.get_correction(cmp_stack)
-                    new_char = random.choice(possible_new_chars)
-                    arg = "%s%s" % (sys.argv[1][:-1], new_char)
-                    sys.argv[1] = tstr(arg, idx=0)
-
-                    self.last_fix = new_char
-                    self.checked_char = None
-                    self.last_result = self.result_of_last_op
-                elif k == Matched.Skip:
-                    # this happens when skipwhitespaces and similar are used.
-                    # the parser skips whitespaces, and compares the last
-                    # non-whitespace which may not be the last character inserted
-                    # if we had inserted a whitespace.
-                    # So the solution (for now) is to simply assume that the last
-                    # character matched.
-                    new_char = random.choice(All_Characters)
-                    arg = "%s%s" % (sys.argv[1], new_char)
-                    sys.argv[1] = tstr(arg, idx=0)
-
-                    self.checked_char = new_char
-                    self.last_fix = None
-                elif k == Matched.String:
-                    #assert h.opA == self.last_fix or h.opA == self.checked_char
-                    common = os.path.commonprefix(h.oargs)
-                    if self.checked_char:
-                        # if checked_char is present, it means we passed through
-                        # Matched.Last
-                        assert h.opB[len(common)-1] == self.checked__char
-                        arg = "%s%s" % (sys.argv[1], h.opB[len(common):])
-                    elif self.last_fix:
-                        assert h.opB[len(common)-1] == self.last_fix
-                        arg = "%s%s" % (sys.argv[1], h.opB[len(common):])
-                    sys.argv[1] = tstr(arg, idx=0)
-
-                    self.last_fix = None
-                    self.checked_char = None
-                elif k == Matched.Last:
-                    new_char = random.choice(All_Characters)
-                    arg = "%s%s" % (sys.argv[1], new_char)
-                    sys.argv[1] = tstr(arg, idx=0)
-
-                    self.checked_char = new_char
-                    self.last_fix = None
-                else:
-                    assert False
-            pass
+                sys.argv[1] = self.on_trace(i, vm, traces)
 
     def cmdline(self, argv):
         parser = argparse.ArgumentParser(

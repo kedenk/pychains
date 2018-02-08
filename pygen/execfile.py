@@ -8,6 +8,8 @@ import logging
 import bytevm.execfile as bex
 import enum
 
+Min_Len = 10
+
 MaxIter = 1000
 def set_maxiter(i):
     global MaxIter
@@ -184,71 +186,94 @@ class ExecFile(bex.ExecFile):
         else:
             return (0, EState.Unknown, (h, self.checked_char, self.last_fix))
 
-    def on_trace(self, i, traces):
+    def on_trace(self, i, traces, steps):
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
-        h, *ltrace = traces
-        self.last_iter_top = h
-        self.result_of_last_op = TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB)
+        while traces:
+            h, *ltrace = traces
+            self.last_iter_top = h
+            self.result_of_last_op = TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB)
 
-        idx, k, info = self.kind(h)
-        log((i, idx, k, info), 0)
-        if k == EState.Char:
-            # This was a character comparison. So collect all
-            # comparisions made using this character. until the
-            # first comparison that was made otherwise.
-            cmp_stack, _ = self.comparisons_on_last_char(h, traces)
-            # Now, try to fix the last failure
-            self.next_opts = self.get_correction(cmp_stack, lambda i: True)
-            new_char = self.choose_char(self.next_opts)
-            self.next_opts = [i for i in self.next_opts if i != new_char]
-            arg = "%s%s" % (self.my_args[:-1], new_char)
+            idx, k, info = self.kind(h)
+            log((i, idx, k, info), 0)
 
-            self.last_fix = new_char
-            self.checked_char = None
-            self.last_result = self.result_of_last_op
-            self.saved_last_iter_top = self.last_iter_top
-            return tstr(arg, idx=0)
-        elif k == EState.String:
-            #assert h.opA == self.last_fix or h.opA == self.checked_char
-            common = os.path.commonprefix(h.oargs)
-            if self.checked_char:
-                # if checked_char is present, it means we passed through
-                # EState.EOF
-                assert h.opB[len(common)-1] == self.checked_char
-                arg = "%s%s" % (self.my_args, h.opB[len(common):])
-            elif self.last_fix:
-                assert h.opB[len(common)-1] == self.last_fix
-                arg = "%s%s" % (self.my_args, h.opB[len(common):])
+            if hasattr(self, 'last_step') and self.last_step is not None:
+                self.last_step == None
+                if steps > self.last_step:
+                    # our gamble paid off. So it was eof
+                    pass
+                else:
+                    # it was not eof. Try eating the last
+                    return self.my_args[:-1]
 
-            self.last_fix = None
-            self.checked_char = None
-            return tstr(arg, idx=0)
-        elif k == EState.EOF:
-            new_char = self.choose_char(All_Characters)
-            arg = "%s%s" % (self.my_args, new_char)
+            if k == EState.Char:
+                # This was a character comparison. So collect all
+                # comparisions made using this character. until the
+                # first comparison that was made otherwise.
+                cmp_stack, _ = self.comparisons_on_last_char(h, traces)
+                # Now, try to fix the last failure
+                self.next_opts = self.get_correction(cmp_stack, lambda i: True)
+                new_char = self.choose_char(self.next_opts)
+                self.next_opts = [i for i in self.next_opts if i != new_char]
+                arg = "%s%s" % (self.my_args[:-1], new_char)
 
-            self.checked_char = new_char
-            self.last_fix = None
-            self.last_result = self.result_of_last_op
-            self.saved_last_iter_top = self.last_iter_top
-            return tstr(arg, idx=0)
-        elif k == EState.Last:
-            # This was a character comparison. So collect all
-            # comparisions made using this character. until the
-            # first comparison that was made otherwise.
-            cmp_stack, _ = self.comparisons_on_last_char(h, traces)
-            # Now, try to fix the last failure
-            self.next_opts = self.get_correction(cmp_stack, lambda i: i not in [self.last_fix, self.checked_char])
-            new_char = self.choose_char(self.next_opts)
-            arg = "%s%s" % (self.my_args[:-1], new_char)
+                self.last_fix = new_char
+                self.checked_char = None
+                self.last_result = self.result_of_last_op
+                self.saved_last_iter_top = self.last_iter_top
+                return tstr(arg, idx=0)
+            elif k == EState.String:
+                #assert h.opA == self.last_fix or h.opA == self.checked_char
+                common = os.path.commonprefix(h.oargs)
+                if self.checked_char:
+                    # if checked_char is present, it means we passed through
+                    # EState.EOF
+                    assert h.opB[len(common)-1] == self.checked_char
+                    arg = "%s%s" % (self.my_args, h.opB[len(common):])
+                elif self.last_fix:
+                    assert h.opB[len(common)-1] == self.last_fix
+                    arg = "%s%s" % (self.my_args, h.opB[len(common):])
 
-            self.last_fix = new_char
-            self.checked_char = None
-            self.last_result = self.result_of_last_op
-            self.saved_last_iter_top = self.last_iter_top
-            return tstr(arg, idx=0)
-        assert False
+                self.last_fix = None
+                self.checked_char = None
+                return tstr(arg, idx=0)
+            elif k == EState.EOF:
+                new_char = self.choose_char(All_Characters)
+                arg = "%s%s" % (self.my_args, new_char)
+
+                self.checked_char = new_char
+                self.last_fix = None
+                self.last_result = self.result_of_last_op
+                self.saved_last_iter_top = self.last_iter_top
+                return tstr(arg, idx=0)
+            elif k == EState.Last:
+                # This was a character comparison. So collect all
+                # comparisions made using this character. until the
+                # first comparison that was made otherwise.
+                cmp_stack, _ = self.comparisons_on_last_char(h, traces)
+                # Now, try to fix the last failure
+                self.next_opts = self.get_correction(cmp_stack, lambda i: i not in [self.last_fix, self.checked_char])
+                new_char = self.choose_char(self.next_opts)
+                arg = "%s%s" % (self.my_args[:-1], new_char)
+
+                self.last_fix = new_char
+                self.checked_char = None
+                self.last_result = self.result_of_last_op
+                self.saved_last_iter_top = self.last_iter_top
+                return tstr(arg, idx=0)
+            else:
+                # it is possible that we are seeing an EOF. To check, try
+                # inserting a value
+                new_char = self.choose_char(All_Characters)
+                arg = "%s%s" % (self.my_args, new_char)
+                self.last_step = steps
+
+                self.checked_char = new_char
+                self.last_fix = None
+                self.last_result = self.result_of_last_op
+                self.saved_last_iter_top = self.last_iter_top
+                return tstr(arg, idx=0)
+            assert False
 
     def exec_code_object(self, code, env):
         self.start_i = 0
@@ -270,12 +295,19 @@ class ExecFile(bex.ExecFile):
             vm = TrackerVM()
             try:
                 log(">> %s" % self.my_args, 0)
-                return vm.run_code(code, f_globals=env)
+                v = vm.run_code(code, f_globals=env)
+                print('Arg: %s' % repr(self.my_args))
+                if random.randint(0,1) == 1 and len(self.my_args) < Min_Len:
+                    return v
+                else:
+                    self.checked_char = self.choose_char(All_Characters)
+                    self.my_args = tstr("%s%s" % (sys.argv[1], self.checked_char), idx=0)
+                    sys.argv[1] = self.my_args
             except Exception as e:
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)
                 save_trace(vm.byte_trace, i, file='byte')
-                self.my_args = self.on_trace(i, traces)
+                self.my_args = self.on_trace(i, traces, vm.steps)
                 sys.argv[1] = self.my_args
 
     def cmdline(self, argv):

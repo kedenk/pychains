@@ -1,4 +1,5 @@
 import random
+import pickle
 import dis
 import os.path
 import string
@@ -28,10 +29,13 @@ def d(v):
         import pudb
         pudb.set_trace()
 
+
+
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
 from .vm import TrackerVM, Op
 from .tstr import tstr
+Pickled = '.pickle/ExecFile-%s.pickle'
 
 class EState(enum.Enum):
     # Char is when we find that the last character being compared is same as
@@ -52,6 +56,16 @@ def save_trace(traces, i, file='trace'):
             [print(i, file=f) for i in traces]
 
 class ExecFile(bex.ExecFile):
+    def load(self, i):
+        with open(Pickled % i, 'rb') as f:
+            self.__dict__ = pickle.load(f)
+            random.setstate(self.rstate)
+
+    def dump(self, i):
+        with open(Pickled % i, 'wb') as f:
+            self.rstate = random.getstate()
+            pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
+
     def comparisons_on_last_char(self, h, cmp_traces):
         """
         The question we are answering is simple. What caused the last
@@ -74,6 +88,7 @@ class ExecFile(bex.ExecFile):
                 cmp_stack.append((i, t))
             else:
                 others.append((i, t))
+
         #else:
         #    # Now, this is heuristics. What we really need is a tainting package
         #    # so that we can exactly track the comparisons on the last character
@@ -160,7 +175,7 @@ class ExecFile(bex.ExecFile):
         else:
             return (0, EState.Unknown, (h, self.checked_char, self.last_fix))
 
-    def on_trace(self, i, vm, traces):
+    def on_trace(self, i, traces):
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
         h, *ltrace = traces
@@ -168,7 +183,7 @@ class ExecFile(bex.ExecFile):
         self.result_of_last_op = TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB)
 
         idx, k, info = self.kind(h)
-        log((i, idx, k, vm.steps, info))
+        log((i, idx, k, info), 0)
         if k == EState.Char:
             # This was a character comparison. So collect all
             # comparisions made using this character. until the
@@ -178,7 +193,7 @@ class ExecFile(bex.ExecFile):
             self.next_opts = self.get_correction(cmp_stack)
             new_char = random.choice(self.next_opts)
             self.next_opts = [i for i in self.next_opts if i != new_char]
-            arg = "%s%s" % (sys.argv[1][:-1], new_char)
+            arg = "%s%s" % (self.my_args[:-1], new_char)
 
             self.last_fix = new_char
             self.checked_char = None
@@ -193,7 +208,7 @@ class ExecFile(bex.ExecFile):
             # So the solution (for now) is to simply assume that the last
             # character matched.
             new_char = random.choice(All_Characters)
-            arg = "%s%s" % (sys.argv[1], new_char)
+            arg = "%s%s" % (self.my_args, new_char)
 
             self.checked_char = new_char
             self.last_fix = None
@@ -205,17 +220,17 @@ class ExecFile(bex.ExecFile):
                 # if checked_char is present, it means we passed through
                 # EState.EOF
                 assert h.opB[len(common)-1] == self.checked_char
-                arg = "%s%s" % (sys.argv[1], h.opB[len(common):])
+                arg = "%s%s" % (self.my_args, h.opB[len(common):])
             elif self.last_fix:
                 assert h.opB[len(common)-1] == self.last_fix
-                arg = "%s%s" % (sys.argv[1], h.opB[len(common):])
+                arg = "%s%s" % (self.my_args, h.opB[len(common):])
 
             self.last_fix = None
             self.checked_char = None
             return tstr(arg, idx=0)
         elif k == EState.EOF:
             new_char = random.choice(All_Characters)
-            arg = "%s%s" % (sys.argv[1], new_char)
+            arg = "%s%s" % (self.my_args, new_char)
 
             self.checked_char = new_char
             self.last_fix = None
@@ -231,7 +246,7 @@ class ExecFile(bex.ExecFile):
             self.next_opts = self.get_correction(cmp_stack)
             self.next_opts = [i for i in self.next_opts if i not in [self.last_fix, self.checked_char]]
             new_char = random.choice(self.next_opts)
-            arg = "%s%s" % (sys.argv[1][:-1], new_char)
+            arg = "%s%s" % (self.my_args[:-1], new_char)
 
             self.last_fix = new_char
             self.checked_char = None
@@ -242,26 +257,30 @@ class ExecFile(bex.ExecFile):
             assert False
 
     def exec_code_object(self, code, env):
-        self.last_fix = sys.argv[1][-2] if len(sys.argv[1]) > 1 else None
-        # The last_character assignment made is the first character assigned
-        # when starting.
-        self.checked_char = sys.argv[1][-1]
-        last_vm_step = 0
+        if os.getenv('LOAD'):
+            self.load(os.getenv('LOAD'))
+            sys.argv[1] = self.my_args
+        else:
+            self.my_args = sys.argv[1]
+            self.last_fix = self.myargs[-2] if len(self.my_args) > 1 else None
+            # The last_character assignment made is the first character assigned
+            # when starting.
+            self.checked_char = self.my_args[-1]
 
         for i in range(0, MaxIter):
+            if os.getenv('DUMP'): self.dump(str(i))
             vm = TrackerVM()
+            res = None
             try:
-                log(">> %s" % sys.argv)
-                res = vm.run_code(code, f_globals=env)
-                log("Arg: %s" % repr(sys.argv[1]), 0)
-                return res
+                log(">> %s" % self.my_args, 0)
+                return vm.run_code(code, f_globals=env)
             except Exception as e:
-                vm_step = vm.steps
-                vm_step = last_vm_step
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)
                 save_trace(vm.byte_trace, i, file='byte')
-                sys.argv[1] = self.on_trace(i, vm, traces)
+                self.my_args = self.on_trace(i, traces)
+                sys.argv[1] = self.my_args
+
 
     def cmdline(self, argv):
         parser = argparse.ArgumentParser(

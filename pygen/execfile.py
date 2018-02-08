@@ -238,7 +238,7 @@ class ExecFile(bex.ExecFile):
             sys.argv[1] = self.my_args
         else:
             self.my_args = sys.argv[1]
-            self.last_fix = self.myargs[-2] if len(self.my_args) > 1 else None
+            self.last_fix = self.my_args[-2] if len(self.my_args) > 1 else None
             # The last_character assignment made is the first character assigned
             # when starting.
             self.checked_char = self.my_args[-1]

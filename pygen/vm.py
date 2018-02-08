@@ -18,6 +18,7 @@ class Op(enum.Enum):
 class TraceOp:
     def __init__(self, opnum, oargs, result, lineinfo):
         self.__dict__.update(locals())
+        del self.__dict__['self']
         self.opA, self.opB = oargs
 
     def to_loc(self):

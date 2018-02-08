@@ -39,6 +39,8 @@ def make_str_wrapper(fun):
                 else:
                     assert False
                 return t
+            elif fun.__name__ == '__rmod__':
+                return tstr(res, idx=0)
             else:
                 assert False
         return res

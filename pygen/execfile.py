@@ -237,6 +237,7 @@ class ExecFile(bex.ExecFile):
             self.checked_char = None
             self.last_result = self.result_of_last_op
             self.saved_last_iter_top = self.last_iter_top
+            return tstr(arg, idx=0)
         else:
             assert False
 

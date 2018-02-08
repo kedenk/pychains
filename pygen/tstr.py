@@ -28,7 +28,7 @@ def make_str_wrapper(fun):
                 i = args[1]
                 if type(i) == slice:
                     if i.start:
-                        t._idx = idx + h.start
+                        t._idx = idx + i.start
                     else:
                         t._idx = idx
                 elif type(i) == int:

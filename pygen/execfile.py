@@ -1,13 +1,11 @@
 import random
 import pickle
-import dis
 import os.path
 import string
 import sys
 import argparse
 import logging
 import bytevm.execfile as bex
-import bytevm.pyvm2 as pvm
 import enum
 
 MaxIter = 1000
@@ -29,8 +27,6 @@ def d(v):
         import pudb
         pudb.set_trace()
 
-
-
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
 from .vm import TrackerVM, Op
@@ -45,7 +41,6 @@ class EState(enum.Enum):
     Last = enum.auto()
     String = enum.auto()
     EOF = enum.auto()
-    Skip = enum.auto()
     Unknown = enum.auto()
 
 All_Characters = list(string.printable + string.whitespace)
@@ -82,29 +77,11 @@ class ExecFile(bex.ExecFile):
         """
         cmp_stack = []
         others = []
-        #if self.last_fix != self.checked_char:
         for i, t in enumerate(cmp_traces):
             if h.opA == t.opA:
                 cmp_stack.append((i, t))
             else:
                 others.append((i, t))
-
-        #else:
-        #    # Now, this is heuristics. What we really need is a tainting package
-        #    # so that we can exactly track the comparisons on the last character
-        #    # for now, we assume that the last successful match was probably
-        #    # made on the last_fix
-        #    assert False # to be disabled after verification.
-        #    for i, t in enumerate(cmp_traces):
-        #        success = False
-        #        if h.opA == t.opA:
-        #            if t.result: success = True
-        #            if success:
-        #                others.append((i, t))
-        #            else:
-        #                cmp_stack.append((i, t))
-        #        else:
-        #            others.append((i, t))
 
         return (cmp_stack, others)
 
@@ -148,7 +125,7 @@ class ExecFile(bex.ExecFile):
             # if we dont get a solution by inverting the last comparison, go one
             # step back and try inverting it again.
             while v < stack_size:
-                # now, we need to skip everything
+                # now, we need to skip everything till v
                 diverge, *satisfy = cmp_stack[v:]
                 lst_solutions = All_Characters
                 for i,elt in reversed(satisfy):
@@ -158,18 +135,12 @@ class ExecFile(bex.ExecFile):
                 i, elt = diverge
                 assert elt.opA in [self.checked_char, self.last_fix]
                 lst_solutions = self.extract_solutions(elt, lst_solutions, True)
-                if lst_solutions:
-                    break
+                if lst_solutions: break
                 v += 1
             lst = [l for l in lst_solutions if constraints(l)]
-            if lst:
-                return lst
+            if lst: return lst
             rand.remove(point_of_divergence)
         assert False
-
-
-    def is_same_op(self, a, b):
-        return a.opnum == b.opnum and a.opA == b.opA and a.opB == b.opB
 
     def kind(self, h):
         pred = TrackerVM.COMPARE_OPERATORS[h.opnum]
@@ -200,7 +171,7 @@ class ExecFile(bex.ExecFile):
         self.result_of_last_op = TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB)
 
         idx, k, info = self.kind(h)
-        log((i, idx, k, info), 0)
+        log((i, idx, k, info), 1)
         if k == EState.Char:
             # This was a character comparison. So collect all
             # comparisions made using this character. until the
@@ -216,19 +187,6 @@ class ExecFile(bex.ExecFile):
             self.checked_char = None
             self.last_result = self.result_of_last_op
             self.saved_last_iter_top = self.last_iter_top
-            return tstr(arg, idx=0)
-        elif k == EState.Skip:
-            # this happens when skipwhitespaces and similar are used.
-            # the parser skips whitespaces, and compares the last
-            # non-whitespace which may not be the last character inserted
-            # if we had inserted a whitespace.
-            # So the solution (for now) is to simply assume that the last
-            # character matched.
-            new_char = random.choice(All_Characters)
-            arg = "%s%s" % (self.my_args, new_char)
-
-            self.checked_char = new_char
-            self.last_fix = None
             return tstr(arg, idx=0)
         elif k == EState.String:
             #assert h.opA == self.last_fix or h.opA == self.checked_char
@@ -269,13 +227,14 @@ class ExecFile(bex.ExecFile):
             self.last_result = self.result_of_last_op
             self.saved_last_iter_top = self.last_iter_top
             return tstr(arg, idx=0)
-        else:
-            assert False
+        assert False
 
     def exec_code_object(self, code, env):
         self.start_i = 0
-        if os.getenv('LOAD'):
-            self.load(os.getenv('LOAD'))
+        load = os.getenv('LOAD')
+        dump = os.getenv('DUMP')
+        if load:
+            self.load(load)
             sys.argv[1] = self.my_args
         else:
             self.my_args = sys.argv[1]
@@ -286,11 +245,10 @@ class ExecFile(bex.ExecFile):
 
         for i in range(self.start_i, MaxIter):
             self.start_i = i
-            if os.getenv('DUMP'): self.dump()
+            if dump: self.dump()
             vm = TrackerVM()
-            res = None
             try:
-                log(">> %s" % self.my_args, 0)
+                log(">> %s" % self.my_args, 1)
                 return vm.run_code(code, f_globals=env)
             except Exception as e:
                 traces = list(reversed(vm.get_trace()))
@@ -298,7 +256,6 @@ class ExecFile(bex.ExecFile):
                 save_trace(vm.byte_trace, i, file='byte')
                 self.my_args = self.on_trace(i, traces)
                 sys.argv[1] = self.my_args
-
 
     def cmdline(self, argv):
         parser = argparse.ArgumentParser(
@@ -326,7 +283,6 @@ class ExecFile(bex.ExecFile):
         level = logging.DEBUG if args.verbose else logging.WARNING
         logging.basicConfig(level=level)
 
-        # making it easy!. We start with a space
         self.checked_char = tstr(random.choice(All_Characters), idx=0)
         new_argv = [args.prog] + [self.checked_char]
         if args.module:

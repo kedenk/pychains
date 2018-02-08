@@ -7,5 +7,6 @@ mi = int(os.getenv('I')) if os.getenv('I') else 100000
 import pygen.execfile
 pygen.execfile.set_maxiter(mi)
 if os.getenv('D'): pygen.execfile.set_debug(int(os.getenv('D')))
+if os.getenv('P'): pygen.execfile.set_dist(os.getenv('P'))
 import sys
 pygen.execfile.ExecFile().cmdline(sys.argv)

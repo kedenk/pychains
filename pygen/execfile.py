@@ -18,9 +18,14 @@ def set_debug(i):
     global Debug
     Debug = i
 
+Distribution='U'
+def set_dist(d):
+    global Distribution
+    Distribution = d
+
 def log(var, i=1):
     if Debug >= i:
-        print(repr(var))
+        print(repr(var), file=sys.stderr, flush=True)
 
 def d(v):
     if v:
@@ -60,6 +65,22 @@ class ExecFile(bex.ExecFile):
         with open(Pickled % self.start_i, 'wb') as f:
             self.rstate = random.getstate()
             pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
+
+    def choose_char(self, lst):
+        if Distribution=='U':
+            return random.choice(lst)
+        myarr = {}
+        for i in All_Characters:
+            myarr[i] = 0
+        for i in self.my_args:
+            myarr[i] += 1
+
+        my_weights = []
+        for l in lst:
+            n = myarr[l]
+            my_weights.append(1/(n+1))
+
+        return random.choices(lst, weights=my_weights, k=1)[0]
 
     def comparisons_on_last_char(self, h, cmp_traces):
         """
@@ -171,7 +192,7 @@ class ExecFile(bex.ExecFile):
         self.result_of_last_op = TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB)
 
         idx, k, info = self.kind(h)
-        log((i, idx, k, info), 1)
+        log((i, idx, k, info), 0)
         if k == EState.Char:
             # This was a character comparison. So collect all
             # comparisions made using this character. until the
@@ -179,7 +200,7 @@ class ExecFile(bex.ExecFile):
             cmp_stack, _ = self.comparisons_on_last_char(h, traces)
             # Now, try to fix the last failure
             self.next_opts = self.get_correction(cmp_stack, lambda i: True)
-            new_char = random.choice(self.next_opts)
+            new_char = self.choose_char(self.next_opts)
             self.next_opts = [i for i in self.next_opts if i != new_char]
             arg = "%s%s" % (self.my_args[:-1], new_char)
 
@@ -204,7 +225,7 @@ class ExecFile(bex.ExecFile):
             self.checked_char = None
             return tstr(arg, idx=0)
         elif k == EState.EOF:
-            new_char = random.choice(All_Characters)
+            new_char = self.choose_char(All_Characters)
             arg = "%s%s" % (self.my_args, new_char)
 
             self.checked_char = new_char
@@ -219,7 +240,7 @@ class ExecFile(bex.ExecFile):
             cmp_stack, _ = self.comparisons_on_last_char(h, traces)
             # Now, try to fix the last failure
             self.next_opts = self.get_correction(cmp_stack, lambda i: i not in [self.last_fix, self.checked_char])
-            new_char = random.choice(self.next_opts)
+            new_char = self.choose_char(self.next_opts)
             arg = "%s%s" % (self.my_args[:-1], new_char)
 
             self.last_fix = new_char
@@ -248,7 +269,7 @@ class ExecFile(bex.ExecFile):
             if dump: self.dump()
             vm = TrackerVM()
             try:
-                log(">> %s" % self.my_args, 1)
+                log(">> %s" % self.my_args, 0)
                 return vm.run_code(code, f_globals=env)
             except Exception as e:
                 traces = list(reversed(vm.get_trace()))
@@ -283,7 +304,8 @@ class ExecFile(bex.ExecFile):
         level = logging.DEBUG if args.verbose else logging.WARNING
         logging.basicConfig(level=level)
 
-        self.checked_char = tstr(random.choice(All_Characters), idx=0)
+        self.my_args = []
+        self.checked_char = tstr(self.choose_char(All_Characters), idx=0)
         new_argv = [args.prog] + [self.checked_char]
         if args.module:
             self.run_python_module(args.prog, new_argv)

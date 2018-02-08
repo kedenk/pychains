@@ -41,8 +41,10 @@ def make_str_wrapper(fun):
                 return t
             elif fun.__name__ == '__rmod__':
                 return tstr(res, idx=0)
+            elif fun.__name__ == '__add__':
+                return tstr(res, idx=0)
             else:
-                assert False
+                return tstr(res, idx=0)
         return res
     return proxy
 

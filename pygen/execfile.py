@@ -61,8 +61,8 @@ class ExecFile(bex.ExecFile):
             self.__dict__ = pickle.load(f)
             random.setstate(self.rstate)
 
-    def dump(self, i):
-        with open(Pickled % i, 'wb') as f:
+    def dump(self):
+        with open(Pickled % self.start_i, 'wb') as f:
             self.rstate = random.getstate()
             pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
 
@@ -111,15 +111,21 @@ class ExecFile(bex.ExecFile):
     def extract_solutions(self, elt, lst_solutions, flip=False):
         fn = TrackerVM.COMPARE_OPERATORS[elt.opnum]
         result = fn(elt.opA, elt.opB)
-        myfn = fn if not flip else lambda a, b: not fn(a, b)
-        if result:
-            lst = [c for c in lst_solutions if myfn(c, elt.opB)]
+        if type(elt.opB) == str and len(elt.opB) == 0:
+            if Op(elt.opnum) in [Op.EQ, Op.NE]:
+                return lst_solutions
+            else:
+                assert False
         else:
-            lst = [c for c in lst_solutions if not myfn(c, elt.opB)]
-        return lst
+            myfn = fn if not flip else lambda a, b: not fn(a, b)
+            if result:
+                lst = [c for c in lst_solutions if myfn(c, elt.opB)]
+            else:
+                lst = [c for c in lst_solutions if not myfn(c, elt.opB)]
+            return lst
 
 
-    def get_correction(self, cmp_stack):
+    def get_correction(self, cmp_stack, constraints):
         """
         cmp_stack contains a set of comparions, with the last comparison made
         at the top of the stack, and first at the bottom. Choose a point
@@ -131,25 +137,36 @@ class ExecFile(bex.ExecFile):
         # because there could be multiple verification steps for the current
         # last character, inverting any of which can lead us to error path.
         # DONT:
-        point_of_divergence = random.randrange(0, stack_size)
-        #point_of_divergence = 0
 
-        # if we dont get a solution by inverting the last comparison, go one
-        # step back and try inverting it again.
-        while point_of_divergence < stack_size:
-            # now, we need to skip everything
-            diverge, *satisfy = cmp_stack[point_of_divergence:]
-            lst_solutions = All_Characters
-            for i,elt in reversed(satisfy):
+        rand = list(range(0, stack_size))
+
+        while rand:
+            # randrange is not including stack_size
+            point_of_divergence = random.choice(rand)
+            v = point_of_divergence
+
+            # if we dont get a solution by inverting the last comparison, go one
+            # step back and try inverting it again.
+            while v < stack_size:
+                # now, we need to skip everything
+                diverge, *satisfy = cmp_stack[v:]
+                lst_solutions = All_Characters
+                for i,elt in reversed(satisfy):
+                    assert elt.opA in [self.checked_char, self.last_fix]
+                    lst_solutions = self.extract_solutions(elt, lst_solutions, False)
+                # now we need to diverge here
+                i, elt = diverge
                 assert elt.opA in [self.checked_char, self.last_fix]
-                lst_solutions = self.extract_solutions(elt, lst_solutions, False)
-            # now we need to diverge here
-            i, elt = diverge
-            assert elt.opA in [self.checked_char, self.last_fix]
-            lst_solutions = self.extract_solutions(elt, lst_solutions, True)
-            if lst_solutions:
-                return lst_solutions
-            point_of_divergence += 1
+                lst_solutions = self.extract_solutions(elt, lst_solutions, True)
+                if lst_solutions:
+                    break
+                v += 1
+            lst = [l for l in lst_solutions if constraints(l)]
+            if lst:
+                return lst
+            rand.remove(point_of_divergence)
+        assert False
+
 
     def is_same_op(self, a, b):
         return a.opnum == b.opnum and a.opA == b.opA and a.opB == b.opB
@@ -157,18 +174,18 @@ class ExecFile(bex.ExecFile):
     def kind(self, h):
         pred = TrackerVM.COMPARE_OPERATORS[h.opnum]
         cmp_result = pred(h.opA, h.opB)
+        o = Op(h.opnum)
 
-        if Op(h.opnum) in [Op.EQ, Op.NE] and type(h.opB) is str and len(h.opB) > 1:
+        if o in [Op.EQ, Op.NE] and type(h.opB) is str and len(h.opB) > 1:
             return (1, EState.String, h)
 
         elif h.opA == self.checked_char:
             return (1, EState.Char, h)
 
-        elif Op(h.opnum) in [Op.EQ, Op.IN, Op.NE, Op.NOT_IN] and h.opA == '':
+        elif o in [Op.EQ, Op.IN, Op.NE, Op.NOT_IN] and h.opA == '':
             return (1, EState.EOF, h)
 
-        elif h.opA in [self.last_fix, self.checked_char] and \
-                Op(h.opnum) in [Op.IN, Op.EQ, Op.NOT_IN, Op.NE]:
+        elif h.opA == self.last_fix and o in [Op.IN, Op.EQ, Op.NOT_IN, Op.NE]:
             # if the comparison is eq or in and it succeeded and the character
             # compared was equal to last_fix, then this is the last match.
             return (1, EState.Last, (h, self.checked_char, self.last_fix))
@@ -190,7 +207,7 @@ class ExecFile(bex.ExecFile):
             # first comparison that was made otherwise.
             cmp_stack, _ = self.comparisons_on_last_char(h, traces)
             # Now, try to fix the last failure
-            self.next_opts = self.get_correction(cmp_stack)
+            self.next_opts = self.get_correction(cmp_stack, lambda i: True)
             new_char = random.choice(self.next_opts)
             self.next_opts = [i for i in self.next_opts if i != new_char]
             arg = "%s%s" % (self.my_args[:-1], new_char)
@@ -243,8 +260,7 @@ class ExecFile(bex.ExecFile):
             # first comparison that was made otherwise.
             cmp_stack, _ = self.comparisons_on_last_char(h, traces)
             # Now, try to fix the last failure
-            self.next_opts = self.get_correction(cmp_stack)
-            self.next_opts = [i for i in self.next_opts if i not in [self.last_fix, self.checked_char]]
+            self.next_opts = self.get_correction(cmp_stack, lambda i: i not in [self.last_fix, self.checked_char])
             new_char = random.choice(self.next_opts)
             arg = "%s%s" % (self.my_args[:-1], new_char)
 
@@ -257,6 +273,7 @@ class ExecFile(bex.ExecFile):
             assert False
 
     def exec_code_object(self, code, env):
+        self.start_i = 0
         if os.getenv('LOAD'):
             self.load(os.getenv('LOAD'))
             sys.argv[1] = self.my_args
@@ -267,8 +284,9 @@ class ExecFile(bex.ExecFile):
             # when starting.
             self.checked_char = self.my_args[-1]
 
-        for i in range(0, MaxIter):
-            if os.getenv('DUMP'): self.dump(str(i))
+        for i in range(self.start_i, MaxIter):
+            self.start_i = i
+            if os.getenv('DUMP'): self.dump()
             vm = TrackerVM()
             res = None
             try:

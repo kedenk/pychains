@@ -103,19 +103,29 @@ class ExecFile(bex.ExecFile):
         somewhere and generate a character that conforms to everything until then.
         """
         stack_size = len(cmp_stack)
-        point = random.randrange(0, stack_size)
-        # point = stack_size - 1
-        # now, we need to skip everything
-        diverge, *satisfy = cmp_stack[point:]
-        lst_solutions = All_Characters
-        for i,elt in reversed(satisfy):
+        # Can the point of divergence in execution chosen randomly from the
+        # comparisions to the last character? The answer seems to be `no`
+        # because there could be multiple verification steps for the current
+        # last character, inverting any of which can lead us to error path.
+        # DONT: point_of_divergence = random.randrange(0, stack_size)
+        point_of_divergence = stack_size - 1
+
+        # if we dont get a solution by inverting the last comparison, go one
+        # step back and try inverting it again.
+        while point_of_divergence >= 0:
+            # now, we need to skip everything
+            diverge, *satisfy = cmp_stack[point_of_divergence:]
+            lst_solutions = All_Characters
+            for i,elt in reversed(satisfy):
+                assert elt.opA == self.checked_char
+                lst_solutions = self.extract_solutions(elt, lst_solutions, False)
+            # now we need to diverge here
+            i, elt = diverge
             assert elt.opA == self.checked_char
-            lst_solutions = self.extract_solutions(elt, lst_solutions, False)
-        # now we need to diverge here
-        i, elt = diverge
-        assert elt.opA == self.checked_char
-        lst_solutions = self.extract_solutions(elt, lst_solutions, True)
-        return lst_solutions
+            lst_solutions = self.extract_solutions(elt, lst_solutions, True)
+            if lst_solutions:
+                return lst_solutions
+            point_of_divergence -= 1
 
     def is_same_op(self, a, b):
         return a.opnum == b.opnum and a.opA == b.opA and a.opB == b.opB

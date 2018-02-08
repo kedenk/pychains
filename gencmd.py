@@ -1,6 +1,6 @@
 import pudb
 import os
-if os.getenv('D'): pudb.set_trace(paused=False)
+if os.getenv('D'): pudb.set_trace(paused=True)
 import random
 if os.getenv('R'): random.seed(int(os.getenv('R')))
 mi = int(os.getenv('I')) if os.getenv('I') else 100000

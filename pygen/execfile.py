@@ -71,14 +71,14 @@ class ExecFile(bex.ExecFile):
             return random.choice(lst)
         myarr = {}
         for i in All_Characters:
-            myarr[i] = 0
+            myarr[i] = 1
         for i in self.my_args:
             myarr[i] += 1
 
         my_weights = []
         for l in lst:
             n = myarr[l]
-            my_weights.append(1/(n+1))
+            my_weights.append(1/n)
 
         return random.choices(lst, weights=my_weights, k=1)[0]
 

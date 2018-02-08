@@ -21,7 +21,12 @@ def set_debug(i):
 
 def log(var, i=1):
     if Debug >= i:
-        print(var)
+        print(repr(var))
+
+def d(v):
+    if v:
+        import pudb
+        pudb.set_trace()
 
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
@@ -29,10 +34,13 @@ from .vm import TrackerVM, Op
 from .tstr import tstr
 
 class EState(enum.Enum):
-    Last = enum.auto()
-    EOF = enum.auto()
-    String = enum.auto()
+    # Char is when we find that the last character being compared is same as
+    # the last character being inserted
     Char = enum.auto()
+    # Last is when the last correction goes bad.
+    Last = enum.auto()
+    String = enum.auto()
+    EOF = enum.auto()
     Skip = enum.auto()
     Unknown = enum.auto()
 
@@ -60,28 +68,28 @@ class ExecFile(bex.ExecFile):
         """
         cmp_stack = []
         others = []
-        if self.last_fix != self.checked_char:
-            for i, t in enumerate(cmp_traces):
-                if h.opA == t.opA:
-                    cmp_stack.append((i, t))
-                else:
-                    others.append((i, t))
-        else:
-            # Now, this is heuristics. What we really need is a tainting package
-            # so that we can exactly track the comparisons on the last character
-            # for now, we assume that the last successful match was probably
-            # made on the last_fix
-            assert False # to be disabled after verification.
-            for i, t in enumerate(cmp_traces):
-                success = False
-                if h.opA == t.opA:
-                    if t.result: success = True
-                    if success:
-                        others.append((i, t))
-                    else:
-                        cmp_stack.append((i, t))
-                else:
-                    others.append((i, t))
+        #if self.last_fix != self.checked_char:
+        for i, t in enumerate(cmp_traces):
+            if h.opA == t.opA:
+                cmp_stack.append((i, t))
+            else:
+                others.append((i, t))
+        #else:
+        #    # Now, this is heuristics. What we really need is a tainting package
+        #    # so that we can exactly track the comparisons on the last character
+        #    # for now, we assume that the last successful match was probably
+        #    # made on the last_fix
+        #    assert False # to be disabled after verification.
+        #    for i, t in enumerate(cmp_traces):
+        #        success = False
+        #        if h.opA == t.opA:
+        #            if t.result: success = True
+        #            if success:
+        #                others.append((i, t))
+        #            else:
+        #                cmp_stack.append((i, t))
+        #        else:
+        #            others.append((i, t))
 
         return (cmp_stack, others)
 
@@ -107,59 +115,50 @@ class ExecFile(bex.ExecFile):
         # comparisions to the last character? The answer seems to be `no`
         # because there could be multiple verification steps for the current
         # last character, inverting any of which can lead us to error path.
-        # DONT: point_of_divergence = random.randrange(0, stack_size)
-        point_of_divergence = stack_size - 1
+        # DONT:
+        point_of_divergence = random.randrange(0, stack_size-1)
+        #point_of_divergence = 0
 
         # if we dont get a solution by inverting the last comparison, go one
         # step back and try inverting it again.
-        while point_of_divergence >= 0:
+        while point_of_divergence < stack_size:
             # now, we need to skip everything
             diverge, *satisfy = cmp_stack[point_of_divergence:]
             lst_solutions = All_Characters
             for i,elt in reversed(satisfy):
-                assert elt.opA == self.checked_char
+                assert elt.opA in [self.checked_char, self.last_fix]
                 lst_solutions = self.extract_solutions(elt, lst_solutions, False)
             # now we need to diverge here
             i, elt = diverge
-            assert elt.opA == self.checked_char
+            assert elt.opA in [self.checked_char, self.last_fix]
             lst_solutions = self.extract_solutions(elt, lst_solutions, True)
             if lst_solutions:
                 return lst_solutions
-            point_of_divergence -= 1
+            point_of_divergence += 1
 
     def is_same_op(self, a, b):
         return a.opnum == b.opnum and a.opA == b.opA and a.opB == b.opB
 
     def kind(self, h):
-        if h.opA == self.checked_char and \
-            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) == False:
-            return (1, EState.Char)
-        elif Op(h.opnum) in [Op.EQ, Op.IN] and h.opA == '' and h.opB != '' and \
-            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) == False:
-            # if opA is empty, and it is being compared to non empty then
-            # the last char added matched
-            return (1, EState.EOF)
-        elif Op(h.opnum) in [Op.NE, Op.NOT_IN] and h.opA == '' and (h.opB == '' or '' in h.opB) and \
-            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) == True:
-            # if opA is empty, and it is being compared to non empty then
-            # the last char added matched
-            return (1.1, EState.EOF)
-        elif Op(h.opnum) == Op.EQ and h.opA == '' and h.opB == ''  and \
-            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) == True:
-            return (2, EState.EOF)
-        elif Op(h.opnum) == Op.EQ and type(h.opB) is str and len(h.opB) > 1 and \
-            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) == False:
-            return (1, EState.String)
-        elif h.opA == self.last_fix and Op(h.opnum) in [Op.IN, Op.EQ] and \
-            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) != self.last_result:
+        pred = TrackerVM.COMPARE_OPERATORS[h.opnum]
+        cmp_result = pred(h.opA, h.opB)
+
+        if Op(h.opnum) in [Op.EQ, Op.NE] and type(h.opB) is str and len(h.opB) > 1:
+            return (1, EState.String, h)
+
+        elif h.opA == self.checked_char:
+            return (1, EState.Char, h)
+
+        elif Op(h.opnum) in [Op.EQ, Op.IN, Op.NE, Op.NOT_IN] and h.opA == '':
+            return (1, EState.EOF, h)
+
+        elif h.opA in [self.last_fix, self.checked_char] and \
+                Op(h.opnum) in [Op.IN, Op.EQ, Op.NOT_IN, Op.NE]:
             # if the comparison is eq or in and it succeeded and the character
             # compared was equal to last_fix, then this is the last match.
-            return (3, EState.Last)
-        elif h.opA == self.checked_char and Op(h.opnum) in [Op.IN, Op.EQ] and \
-            TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB) != self.last_result:
-            return (4 ,EState.EOF)
+            return (1, EState.Last, (h, self.checked_char, self.last_fix))
         else:
-            return (0, EState.Unknown)
+            return (0, EState.Unknown, (h, self.checked_char, self.last_fix))
 
     def on_trace(self, i, vm, traces):
         # we are assuming a character by character comparison.
@@ -168,13 +167,13 @@ class ExecFile(bex.ExecFile):
         self.last_iter_top = h
         self.result_of_last_op = TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB)
 
-        idx, k = self.kind(h)
-        log((i, idx, k, vm.steps), 2)
+        idx, k, info = self.kind(h)
+        log((i, idx, k, vm.steps, info))
         if k == EState.Char:
             # This was a character comparison. So collect all
             # comparisions made using this character. until the
             # first comparison that was made otherwise.
-            cmp_stack, _ = self.comparisons_on_last_char(h, ltrace)
+            cmp_stack, _ = self.comparisons_on_last_char(h, traces)
             # Now, try to fix the last failure
             self.next_opts = self.get_correction(cmp_stack)
             new_char = random.choice(self.next_opts)
@@ -205,7 +204,7 @@ class ExecFile(bex.ExecFile):
             if self.checked_char:
                 # if checked_char is present, it means we passed through
                 # EState.EOF
-                assert h.opB[len(common)-1] == self.checked__char
+                assert h.opB[len(common)-1] == self.checked_char
                 arg = "%s%s" % (sys.argv[1], h.opB[len(common):])
             elif self.last_fix:
                 assert h.opB[len(common)-1] == self.last_fix
@@ -224,17 +223,20 @@ class ExecFile(bex.ExecFile):
             self.saved_last_iter_top = self.last_iter_top
             return tstr(arg, idx=0)
         elif k == EState.Last:
-            # try other alternatives
+            # This was a character comparison. So collect all
+            # comparisions made using this character. until the
+            # first comparison that was made otherwise.
+            cmp_stack, _ = self.comparisons_on_last_char(h, traces)
+            # Now, try to fix the last failure
+            self.next_opts = self.get_correction(cmp_stack)
+            self.next_opts = [i for i in self.next_opts if i not in [self.last_fix, self.checked_char]]
             new_char = random.choice(self.next_opts)
-            self.next_opts = [i for i in self.next_opts if i != new_char]
-
             arg = "%s%s" % (sys.argv[1][:-1], new_char)
 
             self.last_fix = new_char
             self.checked_char = None
             self.last_result = self.result_of_last_op
             self.saved_last_iter_top = self.last_iter_top
-            return tstr(arg, idx=0)
         else:
             assert False
 
@@ -248,9 +250,9 @@ class ExecFile(bex.ExecFile):
         for i in range(0, MaxIter):
             vm = TrackerVM()
             try:
-                log(">> %s" % sys.argv, 0)
+                log(">> %s" % sys.argv)
                 res = vm.run_code(code, f_globals=env)
-                log("Result: %s" % sys.argv)
+                log("Arg: %s" % repr(sys.argv[1]), 0)
                 return res
             except Exception as e:
                 vm_step = vm.steps

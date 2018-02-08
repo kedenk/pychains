@@ -131,7 +131,7 @@ class ExecFile(bex.ExecFile):
         # because there could be multiple verification steps for the current
         # last character, inverting any of which can lead us to error path.
         # DONT:
-        point_of_divergence = random.randrange(0, stack_size-1)
+        point_of_divergence = random.randrange(0, stack_size)
         #point_of_divergence = 0
 
         # if we dont get a solution by inverting the last comparison, go one

@@ -101,16 +101,13 @@ class ExecFile(bex.ExecFile):
         and satisfy all in lst.
         """
         cmp_stack = []
-        others = []
         for i, t in enumerate(cmp_traces):
             # TODO: we conflate earlier characters that match the current char.
             # This can be fixed only by tracking taint information.
-            if h.opA == t.opA:
-                cmp_stack.append((i, t))
-            else:
-                others.append((i, t))
-
-        return (cmp_stack, others)
+            if not type(t.opA) == str: continue
+            if not len(t.opA) == 1: continue
+            if h.opA != t.opA: return cmp_stack
+            cmp_stack.append((i, t))
 
     def extract_solutions(self, elt, lst_solutions, flip=False):
         fn = TrackerVM.COMPARE_OPERATORS[elt.opnum]
@@ -212,7 +209,7 @@ class ExecFile(bex.ExecFile):
                 # This was a character comparison. So collect all
                 # comparisions made using this character. until the
                 # first comparison that was made otherwise.
-                cmp_stack, _ = self.comparisons_on_last_char(h, traces)
+                cmp_stack = self.comparisons_on_last_char(h, traces)
                 # Now, try to fix the last failure
                 self.next_opts = self.get_correction(cmp_stack, lambda i: True)
                 new_char = self.choose_char(self.next_opts)
@@ -220,6 +217,8 @@ class ExecFile(bex.ExecFile):
                 arg = "%s%s" % (self.my_args[:-1], new_char)
 
                 self.last_fix = new_char
+                self.fixes = [self.last_fix]
+
                 self.checked_char = None
                 return tstr(arg, idx=0)
             elif k == EState.String:
@@ -248,13 +247,17 @@ class ExecFile(bex.ExecFile):
                 # This was a character comparison. So collect all
                 # comparisions made using this character. until the
                 # first comparison that was made otherwise.
-                cmp_stack, _ = self.comparisons_on_last_char(h, traces)
+                cmp_stack = self.comparisons_on_last_char(h, traces)
                 # Now, try to fix the last failure
-                self.next_opts = self.get_correction(cmp_stack, lambda i: i not in [self.last_fix, self.checked_char])
+                self.next_opts = self.get_correction(cmp_stack, lambda i: i not in self.fixes and i != self.checked_char)
+                if not self.next_opts:
+                    raise Exception('Exhausted attempts: %s' % self.fixes)
                 new_char = self.choose_char(self.next_opts)
                 arg = "%s%s" % (self.my_args[:-1], new_char)
 
                 self.last_fix = new_char
+                self.fixes.append(self.last_fix)
+
                 self.checked_char = None
                 return tstr(arg, idx=0)
             else:

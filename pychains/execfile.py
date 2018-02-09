@@ -42,6 +42,9 @@ def d(v):
         import pudb
         pudb.set_trace()
 
+Load = os.getenv('LOAD')
+Dump = os.getenv('DUMP')
+
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
 from .vm import TrackerVM, Op
@@ -63,7 +66,7 @@ All_Characters = list(string.printable + string.whitespace)
 def save_trace(traces, i, file='trace'):
     if Debug > 0:
         with open('.t/%s-%d.txt' % (file,i), 'w+') as f:
-            [print(i, file=f) for i in traces]
+            for i in traces: print(i, file=f)
 
 class ExecFile(bex.ExecFile):
     def load(self, i):
@@ -77,19 +80,10 @@ class ExecFile(bex.ExecFile):
             pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
 
     def choose_char(self, lst):
-        if Distribution=='U':
-            return random.choice(lst)
-        myarr = {}
-        for i in All_Characters:
-            myarr[i] = 1
-        for i in self.my_args:
-            myarr[i] += 1
-
-        my_weights = []
-        for l in lst:
-            n = myarr[l]
-            my_weights.append(1/n)
-
+        if Distribution=='U': return random.choice(lst)
+        myarr = {i:1 for i in All_Characters}
+        for i in self.my_args: myarr[i] += 1
+        my_weights = [1/myarr[l] for l in lst]
         return random.choices(lst, weights=my_weights, k=1)[0]
 
     def comparisons_on_last_char(self, h, cmp_traces):
@@ -109,6 +103,8 @@ class ExecFile(bex.ExecFile):
         cmp_stack = []
         others = []
         for i, t in enumerate(cmp_traces):
+            # TODO: we conflate earlier characters that match the current char.
+            # This can be fixed only by tracking taint information.
             if h.opA == t.opA:
                 cmp_stack.append((i, t))
             else:
@@ -275,10 +271,8 @@ class ExecFile(bex.ExecFile):
 
     def exec_code_object(self, code, env):
         self.start_i = 0
-        load = os.getenv('LOAD')
-        dump = os.getenv('DUMP')
-        if load:
-            self.load(load)
+        if Load:
+            self.load(Load)
             sys.argv[1] = self.my_args
         else:
             self.my_args = sys.argv[1]
@@ -289,7 +283,7 @@ class ExecFile(bex.ExecFile):
 
         for i in range(self.start_i, MaxIter):
             self.start_i = i
-            if dump: self.dump()
+            if Dump: self.dump()
             vm = TrackerVM()
             try:
                 log(">> %s" % self.my_args, 0)

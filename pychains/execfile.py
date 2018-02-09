@@ -106,8 +106,9 @@ class ExecFile(bex.ExecFile):
             # This can be fixed only by tracking taint information.
             if not type(t.opA) == str: continue
             if not len(t.opA) == 1: continue
-            if h.opA != t.opA: return cmp_stack
+            if h.opA != t.opA: break
             cmp_stack.append((i, t))
+        return cmp_stack
 
     def extract_solutions(self, elt, lst_solutions, flip=False):
         fn = TrackerVM.COMPARE_OPERATORS[elt.opnum]
@@ -203,6 +204,7 @@ class ExecFile(bex.ExecFile):
                     pass
                 else:
                     # it was not eof. Try eating the last
+                    self.last_step = None
                     return self.my_args[:-1]
 
             if k == EState.Char:

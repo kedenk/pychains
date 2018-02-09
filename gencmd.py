@@ -8,5 +8,6 @@ import pygen.execfile
 pygen.execfile.set_maxiter(mi)
 if os.getenv('D'): pygen.execfile.set_debug(int(os.getenv('D')))
 if os.getenv('P'): pygen.execfile.set_dist(os.getenv('P'))
+if os.getenv('LARGE'): pygen.execfile.set_input_strategy(os.getenv('LARGE'))
 import sys
 pygen.execfile.ExecFile().cmdline(sys.argv)

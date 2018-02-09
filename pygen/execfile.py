@@ -15,6 +15,14 @@ def set_maxiter(i):
     global MaxIter
     MaxIter = i
 
+Return_Fast = True
+def set_input_strategy(i):
+    global Return_Fast
+    if i == 'LARGE':
+        Return_Fast = False
+    elif i == 'FIRST':
+        Return_Fast = True
+
 Debug=0
 def set_debug(i):
     global Debug
@@ -297,7 +305,7 @@ class ExecFile(bex.ExecFile):
                 log(">> %s" % self.my_args, 0)
                 v = vm.run_code(code, f_globals=env)
                 print('Arg: %s' % repr(self.my_args))
-                if random.randint(0,1) == 1 and len(self.my_args) < Min_Len:
+                if Return_Fast and random.randint(0,1) == 1 and len(self.my_args) < Min_Len:
                     return v
                 else:
                     self.checked_char = self.choose_char(All_Characters)

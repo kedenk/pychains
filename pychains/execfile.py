@@ -199,8 +199,6 @@ class ExecFile(bex.ExecFile):
         # so get the comparison with the last element.
         while traces:
             h, *ltrace = traces
-            self.last_iter_top = h
-            self.result_of_last_op = TrackerVM.COMPARE_OPERATORS[h.opnum](h.opA, h.opB)
 
             idx, k, info = self.kind(h)
             log((i, idx, k, info), 0)
@@ -227,8 +225,6 @@ class ExecFile(bex.ExecFile):
 
                 self.last_fix = new_char
                 self.checked_char = None
-                self.last_result = self.result_of_last_op
-                self.saved_last_iter_top = self.last_iter_top
                 return tstr(arg, idx=0)
             elif k == EState.String:
                 #assert h.opA == self.last_fix or h.opA == self.checked_char
@@ -251,8 +247,6 @@ class ExecFile(bex.ExecFile):
 
                 self.checked_char = new_char
                 self.last_fix = None
-                self.last_result = self.result_of_last_op
-                self.saved_last_iter_top = self.last_iter_top
                 return tstr(arg, idx=0)
             elif k == EState.Last:
                 # This was a character comparison. So collect all
@@ -266,8 +260,6 @@ class ExecFile(bex.ExecFile):
 
                 self.last_fix = new_char
                 self.checked_char = None
-                self.last_result = self.result_of_last_op
-                self.saved_last_iter_top = self.last_iter_top
                 return tstr(arg, idx=0)
             else:
                 # it is possible that we are seeing an EOF. To check, try
@@ -278,8 +270,6 @@ class ExecFile(bex.ExecFile):
 
                 self.checked_char = new_char
                 self.last_fix = None
-                self.last_result = self.result_of_last_op
-                self.saved_last_iter_top = self.last_iter_top
                 return tstr(arg, idx=0)
             assert False
 

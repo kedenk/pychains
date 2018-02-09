@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 
 # microjson - Minimal JSON parser/emitter for use in standalone scripts.
 # No warranty. Free to use/modify as you see fit. Trades speed for compactness.
@@ -177,6 +178,13 @@ def _from_json_number(stm):
             is_float = 1
             if c in ('e','E'):
                 saw_exp = 1
+
+        s = stm.substr(pos, stm.pos - pos)
+        if is_float:
+            float(s)
+        else:
+            int(s)
+
         stm.next()
 
     s = stm.substr(pos, stm.pos - pos)
@@ -227,10 +235,10 @@ def _from_json_dict(stm):
             raise JSONError(E_TRUNC, stm, pos)
 
         # end of dictionary, or next item
+        if expect_key and c in ('}',','):
+            raise JSONError(E_DKEY, stm, stm.pos)
         if c in ('}',','):
             stm.next()
-            if expect_key:
-                raise JSONError(E_DKEY, stm, stm.pos)
             if c == '}':
                 return result
             expect_key = 1
@@ -382,3 +390,5 @@ if __name__ == '__main__':
     import sys
     result = from_json(sys.argv[1])
     print(repr(result))
+    #with open(sys.argv[1]) as f:
+    #    main(f.read())

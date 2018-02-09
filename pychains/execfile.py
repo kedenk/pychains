@@ -305,12 +305,12 @@ class ExecFile(bex.ExecFile):
                 log(">> %s" % self.my_args, 0)
                 v = vm.run_code(code, f_globals=env)
                 print('Arg: %s' % repr(self.my_args))
-                if Return_Fast and random.randint(0,1) == 1 and len(self.my_args) < Min_Len:
-                    return v
-                else:
+                if not Return_Fast and random.randint(0,1) == 1 and len(self.my_args) < Min_Len:
                     self.checked_char = self.choose_char(All_Characters)
                     self.my_args = tstr("%s%s" % (sys.argv[1], self.checked_char), idx=0)
                     sys.argv[1] = self.my_args
+                else:
+                    return v
             except Exception as e:
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)

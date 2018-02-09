@@ -8,6 +8,6 @@ import pychains.execfile
 pychains.execfile.set_maxiter(mi)
 if os.getenv('D'): pychains.execfile.set_debug(int(os.getenv('D')))
 if os.getenv('P'): pychains.execfile.set_dist(os.getenv('P'))
-if os.getenv('LARGE'): pychains.execfile.set_input_strategy(os.getenv('LARGE'))
+if os.getenv('ISTRATEGY'): pychains.execfile.set_input_strategy(os.getenv('ISTRATEGY'))
 import sys
 pychains.execfile.ExecFile().cmdline(sys.argv)

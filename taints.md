@@ -1,0 +1,1 @@
+capitalize, expandtabs, ljust, splitlines, upper, center, lower, rjust, zfill, format, lstrip, rpartition, strip, decode, partition, rsplit, swapcase, encode, replace, rstrip, title, join, split), splicing ( [ ] ), concatenation (+), repeating (*), formatting (%)

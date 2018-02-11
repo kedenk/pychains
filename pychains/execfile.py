@@ -68,6 +68,7 @@ class EState(enum.Enum):
     # Char is when we find that the last character being compared is same as
     # the last character being inserted
     Char = enum.auto()
+    Trim = enum.auto()
     # Last is when the last correction goes bad.
     Last = enum.auto()
     String = enum.auto()
@@ -127,8 +128,11 @@ class ExecFile(bex.ExecFile):
             if not check:
                 cmp_stack.append((i, t))
             else:
-                if isinstance(t.opA, str) and t.opA._idx > last_cmp_idx:
-                    assert False
+                pass
+                # see microjson.py: decode_escape: ESC_MAP.get(c) why we cant always
+                # transfer tstr
+                #if isinstance(t.opA, str) and t.opA._idx > last_cmp_idx:
+                    #assert False
 
         return cmp_stack
 
@@ -200,6 +204,9 @@ class ExecFile(bex.ExecFile):
         elif h.opA == self.checked_char:
             return (1, EState.Char, h)
 
+        elif type(h.opA) is tstr and len(h.opA) == 1 and h.opA._idx != self.my_args[-1]._idx:
+            return (1, EState.Trim, h)
+
         elif o in [Op.EQ, Op.IN, Op.NE, Op.NOT_IN] and h.opA == '':
             return (1, EState.EOF, h)
 
@@ -231,6 +238,8 @@ class ExecFile(bex.ExecFile):
                     return self.my_args[:-1]
 
             if k == EState.Char:
+                # my_args[-1]._idx is same as len(my_args) - 1
+                assert self.my_args[-1]._idx == len(self.my_args) -1
                 # This was a character comparison. So collect all
                 # comparisions made using this character. until the
                 # first comparison that was made otherwise.
@@ -245,7 +254,14 @@ class ExecFile(bex.ExecFile):
                 self.fixes = [self.last_fix]
 
                 self.checked_char = None
-                return tstr(arg, idx=0)
+                return arg
+            elif k == EState.Trim:
+                # we need to (1) find where h.opA._idx is within
+                # self.my_args, and trim self.my_args to that location
+                args = self.my_args[h.opA._idx:]
+                import pudb; pudb.set_trace()
+                return args # VERIFY - TODO
+
             elif k == EState.String:
                 #assert h.opA == self.last_fix or h.opA == self.checked_char
                 common = os.path.commonprefix(h.oargs)
@@ -260,14 +276,14 @@ class ExecFile(bex.ExecFile):
 
                 self.last_fix = None
                 self.checked_char = None
-                return tstr(arg, idx=0)
+                return arg
             elif k == EState.EOF:
                 new_char = self.choose_char(All_Characters)
                 arg = "%s%s" % (self.my_args, new_char)
 
                 self.checked_char = new_char
                 self.last_fix = None
-                return tstr(arg, idx=0)
+                return arg
             elif k == EState.Last:
                 # This was a character comparison. So collect all
                 # comparisions made using this character. until the
@@ -284,7 +300,7 @@ class ExecFile(bex.ExecFile):
                 self.fixes.append(self.last_fix)
 
                 self.checked_char = None
-                return tstr(arg, idx=0)
+                return arg
             else:
                 # probably a late validation. trim the last and
                 # try again.
@@ -299,7 +315,7 @@ class ExecFile(bex.ExecFile):
 
                 #self.checked_char = new_char
                 #self.last_fix = None
-                #return tstr(arg, idx=0)
+                #return arg
             assert False
 
     def exec_code_object(self, code, env):
@@ -315,7 +331,7 @@ class ExecFile(bex.ExecFile):
             self.checked_char = self.my_args[-1]
 
         # replace interesting things
-        env['type'] = my_type
+        # env['type'] = my_type
         env['int'] = my_int
         env['float'] = my_float
 
@@ -337,7 +353,7 @@ class ExecFile(bex.ExecFile):
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)
                 save_trace(vm.byte_trace, i, file='byte')
-                self.my_args = self.on_trace(i, traces, vm.steps)
+                self.my_args = tstr(self.on_trace(i, traces, vm.steps), idx=0)
                 sys.argv[1] = self.my_args
 
     def cmdline(self, argv):
@@ -367,8 +383,8 @@ class ExecFile(bex.ExecFile):
         logging.basicConfig(level=level)
 
         self.my_args = []
-        self.checked_char = tstr(self.choose_char(All_Characters), idx=0)
-        new_argv = [args.prog] + [self.checked_char]
+        self.checked_char = self.choose_char(All_Characters)
+        new_argv = [args.prog] + [tstr(self.checked_char, idx=0)]
         if args.module:
             self.run_python_module(args.prog, new_argv)
         else:

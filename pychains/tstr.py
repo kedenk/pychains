@@ -38,7 +38,7 @@ class tstr(str):
             if i >= 0:
                 t._idx = idx + i
             else:
-                t._idx = len(t) + i
+                t._idx = len(self) + i
         else:
             assert False
         return t
@@ -140,6 +140,6 @@ def make_str_wrapper(fun):
     return proxy
 
 for name, fn in inspect.getmembers(str, callable):
-    if name not in ['__class__', '__new__', '__str__', '__init__', '__repr__',
+    if name not in ['__class__', '__new__', '__str__', '__init__', '__repr__', '__getattribute__',
             '__getitem__', '__rmod__', '__mod__', '__add__', '__radd__', 'strip', 'lstrip', 'rstrip']:
         setattr(tstr, name, make_str_wrapper(fn))

@@ -6,6 +6,7 @@ import sys
 import argparse
 import logging
 import bytevm.execfile as bex
+from . import dataparser as dp
 import enum
 
 Min_Len = 10
@@ -37,7 +38,7 @@ def log(var, i=1):
     if Debug >= i:
         print(repr(var), file=sys.stderr, flush=True)
 
-def d(v):
+def d(v=True):
     if v:
         import pudb
         pudb.set_trace()
@@ -50,6 +51,18 @@ Dump = os.getenv('DUMP')
 from .vm import TrackerVM, Op
 from .tstr import tstr
 Pickled = '.pickle/ExecFile-%s.pickle'
+
+def my_int(s):
+    return dp.parse_int(s)
+
+def my_float(s):
+    return dp.parse_float(s)
+
+def my_type(x):
+    if '.tstr'in type(x):
+        import pudb; pudb.set_trace()
+        return 'str'
+    return type(x)
 
 class EState(enum.Enum):
     # Char is when we find that the last character being compared is same as
@@ -100,20 +113,29 @@ class ExecFile(bex.ExecFile):
         lst = cmp_stack[i:] (remember cmp_stack is reversed)
         and satisfy all in lst.
         """
+        last_cmp_idx = h.opA._idx
         cmp_stack = []
+        check = False
         for i, t in enumerate(cmp_traces):
             # TODO: we conflate earlier characters that match the current char.
             # This can be fixed only by tracking taint information.
-            if not type(t.opA) == str: continue
+            if not isinstance(t.opA, str): continue
             if not len(t.opA) == 1: continue
-            if h.opA != t.opA: break
-            cmp_stack.append((i, t))
+            if h.opA != t.opA:
+                # make sure that there has not been any comparisons beyond last_cmp_idx
+                check = True
+            if not check:
+                cmp_stack.append((i, t))
+            else:
+                if isinstance(t.opA, str) and t.opA._idx > last_cmp_idx:
+                    assert False
+
         return cmp_stack
 
     def extract_solutions(self, elt, lst_solutions, flip=False):
         fn = TrackerVM.COMPARE_OPERATORS[elt.opnum]
         result = fn(elt.opA, elt.opB)
-        if type(elt.opB) == str and len(elt.opB) == 0:
+        if isinstance(elt.opB, str) and len(elt.opB) == 0:
             if Op(elt.opnum) in [Op.EQ, Op.NE]:
                 return lst_solutions
             else:
@@ -172,7 +194,7 @@ class ExecFile(bex.ExecFile):
         cmp_result = pred(h.opA, h.opB)
         o = Op(h.opnum)
 
-        if o in [Op.EQ, Op.NE] and type(h.opB) is str and len(h.opB) > 1:
+        if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1:
             return (1, EState.String, h)
 
         elif h.opA == self.checked_char:
@@ -189,6 +211,7 @@ class ExecFile(bex.ExecFile):
             return (0, EState.Unknown, (h, self.checked_char, self.last_fix))
 
     def on_trace(self, i, traces, steps):
+        a = self.my_args
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
         while traces:
@@ -263,15 +286,20 @@ class ExecFile(bex.ExecFile):
                 self.checked_char = None
                 return tstr(arg, idx=0)
             else:
+                # probably a late validation. trim the last and
+                # try again.
+                traces = ltrace
+                continue
+
                 # it is possible that we are seeing an EOF. To check, try
                 # inserting a value
-                new_char = self.choose_char(All_Characters)
-                arg = "%s%s" % (self.my_args, new_char)
-                self.last_step = steps
+                #new_char = self.choose_char(All_Characters)
+                #arg = "%s%s" % (self.my_args, new_char)
+                #self.last_step = steps
 
-                self.checked_char = new_char
-                self.last_fix = None
-                return tstr(arg, idx=0)
+                #self.checked_char = new_char
+                #self.last_fix = None
+                #return tstr(arg, idx=0)
             assert False
 
     def exec_code_object(self, code, env):
@@ -285,6 +313,11 @@ class ExecFile(bex.ExecFile):
             # The last_character assignment made is the first character assigned
             # when starting.
             self.checked_char = self.my_args[-1]
+
+        # replace interesting things
+        env['type'] = my_type
+        env['int'] = my_int
+        env['float'] = my_float
 
         for i in range(self.start_i, MaxIter):
             self.start_i = i

@@ -41,6 +41,27 @@ class TrackerVM(pvm.VirtualMachine):
         self.cmp_trace.append(TraceOp(opnum, [opA, opB], result, (self.fn, self.line, self.cn)))
         super().byte_COMPARE_OP(opnum)
 
+    def byte_LOAD_ATTR(self, name):
+        super().byte_LOAD_ATTR(name)
+
+    def byte_LOAD_GLOBAL(self, name):
+        super().byte_LOAD_GLOBAL(name)
+
+    def byte_LOAD_NAME(self, name):
+        super().byte_LOAD_NAME(name)
+
+    def byte_IMPORT_NAME(self, name):
+        if name == 'io':
+            super().byte_IMPORT_NAME('myio')
+            r = self.frame.stack[-1]
+            r.__name__ == 'io'
+        else:
+            super().byte_IMPORT_NAME(name)
+
+    def byte_CALL_FUNCTION(self, arg):
+        return super().byte_CALL_FUNCTION(arg)
+
+
     def parse_byte_and_args(self):
         byteName, arguments, offset = super().parse_byte_and_args()
         self.byte_trace.append((byteName, arguments, self.frame.stack))

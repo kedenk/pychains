@@ -179,12 +179,6 @@ def _from_json_number(stm):
             if c in ('e','E'):
                 saw_exp = 1
 
-        s = stm.substr(pos, stm.pos - pos)
-        if is_float:
-            float(s)
-        else:
-            int(s)
-
         stm.next()
 
     s = stm.substr(pos, stm.pos - pos)

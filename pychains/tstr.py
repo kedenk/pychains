@@ -1,6 +1,19 @@
 import inspect
 import pudb
 
+class tstr_iterator():
+    def __init__(self, tstr):
+        self._tstr = tstr
+        self._str_idx = 0
+
+    def __next__(self):
+        if self._str_idx == len(self._tstr): raise StopIteration
+        # calls tstr getitem should be tstr
+        c = self._tstr[self._str_idx]
+        assert type(c) is tstr
+        self._str_idx += 1
+        return c
+
 class tstr(str):
     def __new__(cls, value, *args, **kw):
         return super(tstr, cls).__new__(cls, value)
@@ -69,6 +82,10 @@ class tstr(str):
     def capitalize(self):
         res = super().capitalize()
         return tstr(res, idx=self._idx)
+
+    def __iter__(self):
+        return tstr_iterator(self)
+
 
 
 def make_str_wrapper(fun):
@@ -141,5 +158,5 @@ def make_str_wrapper(fun):
 
 for name, fn in inspect.getmembers(str, callable):
     if name not in ['__class__', '__new__', '__str__', '__init__', '__repr__', '__getattribute__',
-            '__getitem__', '__rmod__', '__mod__', '__add__', '__radd__', 'strip', 'lstrip', 'rstrip']:
+            '__getitem__', '__rmod__', '__mod__', '__add__', '__radd__', 'strip', 'lstrip', 'rstrip', '__iter__']:
         setattr(tstr, name, make_str_wrapper(fn))

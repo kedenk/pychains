@@ -18,40 +18,46 @@ class tstr(str):
     def __new__(cls, value, *args, **kw):
         return super(tstr, cls).__new__(cls, value)
 
-    def __init__(self, value, idx=-1, extra=0):
+    def __init__(self, value, idx=-1, unmapped_till=0):
         self._idx = idx
-        self._extra = extra
+        self._unmapped_till = unmapped_till
+
+    def get_mapped_char_idx(self, i):
+        # if the current string is not mapped to input till
+        # char 10 (_unmapped_till), but the
+        # character 10 is mapped to character 5 (_idx)
+        # then requesting 10 should return 5
+        #   which is 5 - 10 + 10
+        # and requesting 11 should return 6
+        #   which is 5 - 10 + 11
+        return self._idx - self._unmapped_till + i
 
     def __add__(self, other):  #concatenation (+)
-        t =  tstr(str.__add__(other, self), idx=self._idx)
+        t =  tstr(str.__add__(other, self), idx=self._idx, unmapped_till=self._unmapped_till)
         return t
 
-    def __radd__(self, other):  #concatenation (+)
-        t =  tstr(str.__add__(other, self), idx=self._idx, extra=len(other))
+    def __radd__(self, other):  #concatenation (+) -- other is not tstr
+        t =  tstr(str.__add__(other, self), idx=self._idx, unmapped_till=len(other)+self._unmapped_till)
         return t
 
-    def __repr__(self): 
+    def __repr__(self):
         return str.__repr__(self)
 
-    def __str__(self): 
+    def __str__(self):
         return str.__str__(self)
 
     def __getitem__(self, key):          # splicing ( [ ] )
         res = super().__getitem__(key)
-        t = tstr(res, idx=1)
-        if hasattr(self, '_idx'):
-            idx = self._idx
-        i = key
-        if type(i) == slice:
-            if i.start:
-                t._idx = idx + i.start
+        t = tstr(res, idx=0)
+        if type(key) == slice:
+            t._idx = self.get_mapped_char_idx(key.start if key.start else 0)
+        elif type(key) == int:
+            if key >= 0:
+                t._idx =  self.get_mapped_char_idx(key)
             else:
-                t._idx = idx
-        elif type(i) == int:
-            if i >= 0:
-                t._idx = idx + i
-            else:
-                t._idx = len(self) + i
+                # TODO: verify how unmapped_till should be added here.
+                assert self._unmapped_till == 0
+                t._idx = len(self) + key
         else:
             assert False
         return t
@@ -61,9 +67,9 @@ class tstr(str):
         return tstr(res, idx=self._idx)
 
     def __rmod__(self, other): #formatting (%) other is format string
-        extra = other.find('%')
+        unmapped_till = other.find('%')
         res = super().__rmod__(other)
-        return tstr(res, idx=self._idx, extra=extra)
+        return tstr(res, idx=self._idx, unmapped_till=unmapped_till)
 
     def strip(self, cl=None):
         res = super().strip(cl)
@@ -92,8 +98,8 @@ class tstr(str):
 
     def __format__(self, formatspec):
         res = super().__format__(formatspec)
-        extra = res.find(self)
-        return tstr(res, idx=self._idx, extra=extra)
+        unmapped_till = res.find(self)
+        return tstr(res, idx=self._idx, unmapped_till=unmapped_till)
 
 
 def make_str_wrapper(fun):
@@ -157,7 +163,7 @@ def make_str_wrapper(fun):
                 return tstr(res, idx=0)
             else:
                 pudb.set_trace()
-                return tstr(res, idx=0)
+                raise Exception('%s Not implemented in TSTR' % fun.__name__)
         return res
     return proxy
 

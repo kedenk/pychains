@@ -304,16 +304,7 @@ class ExecFile(bex.ExecFile):
                 traces = ltrace
                 continue
 
-                # it is possible that we are seeing an EOF. To check, try
-                # inserting a value
-                #new_char = self.choose_char(All_Characters)
-                #arg = "%s%s" % (self.my_args, new_char)
-                #self.last_step = steps
-
-                #self.checked_char = new_char
-                #self.last_fix = None
-                #return arg
-            assert False
+        return None
 
     def exec_code_object(self, code, env):
         self.start_i = 0
@@ -351,6 +342,8 @@ class ExecFile(bex.ExecFile):
                 save_trace(traces, i)
                 save_trace(vm.byte_trace, i, file='byte')
                 self.my_args = tstr(self.on_trace(i, traces, vm.steps), idx=0)
+                if not self.my_args:
+                    raise Exception('No suitable continuation found')
                 sys.argv[1] = self.my_args
 
     def cmdline(self, argv):

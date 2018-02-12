@@ -86,6 +86,14 @@ class tstr(str):
     def __iter__(self):
         return tstr_iterator(self)
 
+    def expandtabs(self):
+        res = super().expandtabs()
+        return tstr(res, idx=self._idx)
+
+    def __format__(self, formatspec):
+        res = super().__format__(formatspec)
+        extra = res.find(self)
+        return tstr(res, idx=self._idx, extra=extra)
 
 
 def make_str_wrapper(fun):
@@ -100,9 +108,6 @@ def make_str_wrapper(fun):
                 pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == '__rmul__': #repeating (*)
-                pudb.set_trace()
-                return tstr(res, idx=0)
-            elif fun.__name__ == 'expandtabs':
                 pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'ljust':
@@ -157,6 +162,7 @@ def make_str_wrapper(fun):
     return proxy
 
 for name, fn in inspect.getmembers(str, callable):
-    if name not in ['__class__', '__new__', '__str__', '__init__', '__repr__', '__getattribute__',
-            '__getitem__', '__rmod__', '__mod__', '__add__', '__radd__', 'strip', 'lstrip', 'rstrip', '__iter__']:
+    if name not in ['__class__', '__new__', '__str__', '__init__', '__repr__',
+            '__getattribute__', '__getitem__', '__rmod__', '__mod__', '__add__',
+            '__radd__', 'strip', 'lstrip', 'rstrip', '__iter__', 'expandtabs', '__format__']:
         setattr(tstr, name, make_str_wrapper(fn))

@@ -6,7 +6,7 @@ import sys
 import argparse
 import logging
 import bytevm.execfile as bex
-from . import dataparser as dp
+import dataparser as dp
 import enum
 
 Min_Len = 10

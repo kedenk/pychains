@@ -55,6 +55,10 @@ class TrackerVM(pvm.VirtualMachine):
             super().byte_IMPORT_NAME('myio')
             r = self.frame.stack[-1]
             r.__name__ == 'io'
+        elif name == 're':
+            super().byte_IMPORT_NAME('rxpy.re')
+            r = self.frame.stack[-1]
+            r.__name__ == 're'
         else:
             super().byte_IMPORT_NAME(name)
 

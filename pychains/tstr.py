@@ -23,7 +23,10 @@ class tstr(str):
         self._unmapped_till = unmapped_till
 
     def x(self, i=0):
-        return get_mapped_char_idx(self, i)
+        v = get_mapped_char_idx(self, i)
+        if v < 0:
+            raise Exception('Invalid mapped char idx in tstr')
+        return v
 
     def get_mapped_char_idx(self, i):
         # if the current string is not mapped to input till

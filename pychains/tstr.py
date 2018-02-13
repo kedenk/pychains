@@ -22,6 +22,9 @@ class tstr(str):
         self._idx = idx
         self._unmapped_till = unmapped_till
 
+    def x(self, i=0):
+        return get_mapped_char_idx(self, i)
+
     def get_mapped_char_idx(self, i):
         # if the current string is not mapped to input till
         # char 10 (_unmapped_till), but the

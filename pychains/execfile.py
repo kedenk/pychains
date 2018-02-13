@@ -111,7 +111,7 @@ class ExecFile(bex.ExecFile):
         lst = cmp_stack[i:] (remember cmp_stack is reversed)
         and satisfy all in lst.
         """
-        last_cmp_idx = h.opA._idx
+        last_cmp_idx = h.opA.x()
         cmp_stack = []
         check = False
         for i, t in enumerate(cmp_traces):
@@ -201,7 +201,7 @@ class ExecFile(bex.ExecFile):
         elif h.opA == self.checked_char:
             return (1, EState.Char, h)
 
-        elif type(h.opA) is tstr and len(h.opA) == 1 and h.opA._idx != self.my_args[-1]._idx:
+        elif type(h.opA) is tstr and len(h.opA) == 1 and h.opA.x() != self.my_args[-1].x():
             return (1, EState.Trim, h)
 
         elif o in [Op.EQ, Op.IN, Op.NE, Op.NOT_IN] and h.opA == '':
@@ -236,7 +236,7 @@ class ExecFile(bex.ExecFile):
 
             if k == EState.Char:
                 # my_args[-1]._idx is same as len(my_args) - 1
-                assert self.my_args[-1]._idx == len(self.my_args) -1
+                assert self.my_args[-1].x() == len(self.my_args) -1
                 # This was a character comparison. So collect all
                 # comparisions made using this character. until the
                 # first comparison that was made otherwise.
@@ -255,7 +255,7 @@ class ExecFile(bex.ExecFile):
             elif k == EState.Trim:
                 # we need to (1) find where h.opA._idx is within
                 # self.my_args, and trim self.my_args to that location
-                args = self.my_args[h.opA._idx:]
+                args = self.my_args[h.opA.x():]
                 import pudb; pudb.set_trace()
                 return args # VERIFY - TODO
 

@@ -341,8 +341,14 @@ class ExecFile(bex.ExecFile):
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)
                 save_trace(vm.byte_trace, i, file='byte')
-                self.my_args = tstr(self.on_trace(i, traces, vm.steps), idx=0)
+                t = self.on_trace(i, traces, vm.steps)
+                if not t:
+                    # remove one character and try again.
+                    self.my_args = self.my_args[:-1]
+                else:
+                    self.my_args = tstr(t, idx=0)
                 if not self.my_args:
+                    # we failed utterly
                     raise Exception('No suitable continuation found')
                 sys.argv[1] = self.my_args
 

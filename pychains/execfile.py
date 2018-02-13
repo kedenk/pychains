@@ -119,9 +119,15 @@ class ExecFile(bex.ExecFile):
             # This can be fixed only by tracking taint information.
             if not isinstance(t.opA, str): continue
             if not len(t.opA) == 1: continue
-            if h.opA != t.opA:
-                # make sure that there has not been any comparisons beyond last_cmp_idx
+            if type(h.opA) is tstr and type(t.opA) is tstr:
+                if h.opA.x() != t.opA.x():
+                    # make sure that there has not been any comparisons beyond last_cmp_idx
+                    check = True
+            elif h.opA != t.opA:
+                # HACK for now. If h.opA is not tstr, we fall back on character
+                # comparisons (which fails for consecutive chars that are same)
                 check = True
+
             if not check:
                 cmp_stack.append((i, t))
             else:
@@ -198,7 +204,7 @@ class ExecFile(bex.ExecFile):
         if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1:
             return (1, EState.String, h)
 
-        elif h.opA == self.checked_char:
+        elif type(h.opA) is tstr and h.opA.x() == self.my_args[-1].x():
             return (1, EState.Char, h)
 
         elif type(h.opA) is tstr and len(h.opA) == 1 and h.opA.x() != self.my_args[-1].x():

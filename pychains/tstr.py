@@ -23,7 +23,7 @@ class tstr(str):
         self._unmapped_till = unmapped_till
 
     def x(self, i=0):
-        v = get_mapped_char_idx(self, i)
+        v = self.get_mapped_char_idx(self, i)
         if v < 0:
             raise Exception('Invalid mapped char idx in tstr')
         return v

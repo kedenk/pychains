@@ -186,16 +186,9 @@ class ExecFile(bex.ExecFile):
         somewhere and generate a character that conforms to everything until then.
         """
         stack_size = len(cmp_stack)
-        # Can the point of divergence in execution chosen randomly from the
-        # comparisions to the last character? The answer seems to be `no`
-        # because there could be multiple verification steps for the current
-        # last character, inverting any of which can lead us to error path.
-        # DONT:
-
-        rand = list(range(0, stack_size))
+        rand = list(range(stack_size))
 
         while rand:
-            # randrange is not including stack_size
             point_of_divergence = random.choice(rand)
             v = point_of_divergence
 
@@ -232,7 +225,7 @@ class ExecFile(bex.ExecFile):
                 return (1, EState.EOF, h)
 
             elif o in CmpSet and len(h.opB) > 1:
-                # A string comparision rather than a character comparison.
+                # A string comparison rather than a character comparison.
                 return (1, EState.String, h)
 
             elif len(h.opA) == 1 and h.opA.x() != self.my_args[-1].x():

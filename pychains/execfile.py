@@ -32,6 +32,8 @@ Dump = False
 # Where to pickle
 Pickled = '.pickle/ExecFile-%s.pickle'
 
+Track = True
+
 Debug=0
 
 All_Characters = list(string.printable + string.whitespace)
@@ -58,6 +60,12 @@ def my_type(x):
         import pudb; pudb.set_trace()
         return 'str'
     return type(x)
+
+def create_arg(s):
+    if Track:
+        return tstr(s, idx=0)
+    else:
+        return s
 
 class EState(enum.Enum):
     # A character comparison using the last character
@@ -372,7 +380,7 @@ class ExecFile(bex.ExecFile):
                 print('Arg: %s' % repr(self.my_args))
                 if random.uniform(0,1) > Return_Probability:
                     self.fixes = [self.choose_char(All_Characters)]
-                    self.my_args = tstr("%s%s" % (sys.argv[1], self.last_fix()), idx=0)
+                    self.my_args = create_arg("%s%s" % (sys.argv[1], self.last_fix()))
                     sys.argv[1] = self.my_args
                 else:
                     return v
@@ -385,7 +393,7 @@ class ExecFile(bex.ExecFile):
                     # remove one character and try again.
                     self.my_args = self.my_args[:-1]
                 else:
-                    self.my_args = tstr(t, idx=0)
+                    self.my_args = create_arg(t)
                 if not self.my_args:
                     # we failed utterly
                     raise Exception('No suitable continuation found')
@@ -419,7 +427,7 @@ class ExecFile(bex.ExecFile):
 
         self.my_args = []
         self.fixes = [self.choose_char(All_Characters)]
-        new_argv = [args.prog] + [tstr(self.last_fix(), idx=0)]
+        new_argv = [args.prog] + [create_arg(self.last_fix())]
         if args.module:
             self.run_python_module(args.prog, new_argv)
         else:

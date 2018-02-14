@@ -6,48 +6,46 @@ import sys
 import argparse
 import logging
 import bytevm.execfile as bex
-import dataparser as dp
 import enum
 
-Min_Len = 10
-
-MaxIter = 1000
-def set_maxiter(i):
-    global MaxIter
-    MaxIter = i
-
-Return_Probability = 1.0
-def set_input_strategy(i):
-    global Return_Probability
-    Return_Probability = float(i)
-
-Debug=0
-def set_debug(i):
-    global Debug
-    Debug = i
-
-Distribution='U'
-def set_dist(d):
-    global Distribution
-    Distribution = d
-
-def log(var, i=1):
-    if Debug >= i:
-        print(repr(var), file=sys.stderr, flush=True)
-
-def d(v=True):
-    if v:
-        import pudb
-        pudb.set_trace()
-
-Load = os.getenv('LOAD')
-Dump = os.getenv('DUMP')
-
-# TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
-
+import dataparser as dp
 from .vm import TrackerVM, Op
 from .tstr import tstr
+
+#  Maximum iterations of fixing exceptions that we try before giving up.
+MaxIter = 1000
+
+# When we get a non exception producing input, what should we do? Should
+# we return immediately or try to make the input larger?
+Return_Probability = 1.0
+
+# The sampling distribution from which the characters are chosen.
+Distribution='U'
+
+# We can choose to load the state at some iteration if we had dumped the
+# state in prior execution.
+Load = 0
+
+# Dump the state (a pickle)
+Dump = False
+
+# Where to pickle
 Pickled = '.pickle/ExecFile-%s.pickle'
+
+Debug=0
+
+All_Characters = list(string.printable + string.whitespace)
+CmpSet = [Op.EQ, Op.NE, Op.IN, Op.NOT_IN]
+
+def log(var, i=1):
+    if Debug >= i: print(repr(var), file=sys.stderr, flush=True)
+
+def d(v=True):
+    if not v: return None
+    import pudb
+    pudb.set_trace()
+
+# TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
 def my_int(s):
     return dp.parse_int(s)
@@ -62,40 +60,62 @@ def my_type(x):
     return type(x)
 
 class EState(enum.Enum):
-    # Char is when we find that the last character being compared is same as
-    # the last character being inserted
+    # A character comparison using the last character
     Char = enum.auto()
+
+    # A char comparison made using a previous character
     Trim = enum.auto()
-    # Last is when the last correction goes bad.
-    Last = enum.auto()
+
+    # A string token comparison
     String = enum.auto()
+
+    # End of string as found using tainting or a comparison with the
+    # empty string
     EOF = enum.auto()
+
+    # -
     Unknown = enum.auto()
 
-All_Characters = list(string.printable + string.whitespace)
-
 def save_trace(traces, i, file='trace'):
-    if Debug > 0:
-        with open('.t/%s-%d.txt' % (file,i), 'w+') as f:
-            for i in traces: print(i, file=f)
+    if not Debug: return None
+    with open('.t/%s-%d.txt' % (file,i), 'w+') as f:
+        for i in traces: print(i, file=f)
 
 class ExecFile(bex.ExecFile):
+
+    # Load the pickled state and also set the random set.
+    # Used to start execution at arbitrary iterations.
+    # requires prior dump
     def load(self, i):
         with open(Pickled % i, 'rb') as f:
             self.__dict__ = pickle.load(f)
             random.setstate(self.rstate)
 
+    # Save the execution states at each iteration.
     def dump(self):
         with open(Pickled % self.start_i, 'wb') as f:
             self.rstate = random.getstate()
             pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
 
     def choose_char(self, lst):
-        if Distribution=='U': return random.choice(lst)
-        myarr = {i:1 for i in All_Characters}
-        for i in self.my_args: myarr[i] += 1
-        my_weights = [1/myarr[l] for l in lst]
-        return random.choices(lst, weights=my_weights, k=1)[0]
+        if Distribution=='C':
+            # A cumulative distribution where characters that have not
+            # appeared until now are given equally higher weight.
+            myarr = {i:1 for i in All_Characters}
+            for i in self.my_args: myarr[i] += 1
+            my_weights = [1/myarr[l] for l in lst]
+            return random.choices(lst, weights=my_weights, k=1)[0]
+        elif Distribution=='X':
+            # A cumulative distribution where characters that have not
+            # appeared in last 100 are given higher weight.
+            myarr = {i:1 for i in All_Characters}
+            for i in set(self.my_args[-100:]):
+                myarr[i] += 10
+            my_weights = [1/myarr[l] for l in lst]
+            return random.choices(lst, weights=my_weights, k=1)[0]
+
+        else:
+            return random.choice(lst)
 
     def comparisons_on_last_char(self, h, cmp_traces):
         """
@@ -111,31 +131,26 @@ class ExecFile(bex.ExecFile):
         lst = cmp_stack[i:] (remember cmp_stack is reversed)
         and satisfy all in lst.
         """
-        last_cmp_idx = h.opA.x()
         cmp_stack = []
         check = False
         for i, t in enumerate(cmp_traces):
-            # TODO: we conflate earlier characters that match the current char.
-            # This can be fixed only by tracking taint information.
             if not isinstance(t.opA, str): continue
             if not len(t.opA) == 1: continue
-            if type(h.opA) is tstr and type(t.opA) is tstr:
-                if h.opA.x() != t.opA.x():
-                    # make sure that there has not been any comparisons beyond last_cmp_idx
-                    check = True
-            elif h.opA != t.opA:
-                # HACK for now. If h.opA is not tstr, we fall back on character
-                # comparisons (which fails for consecutive chars that are same)
-                check = True
 
+            if type(t.opA) is tstr:
+                if h.opA.x() != t.opA.x(): check = True
+            else:
+                # what fails here: Imagine
+                #    ESC_MAP = {'n': '\n', 't': '\t'}
+                #    t.opA = ESC_MAP[sys.argv[-1]]
+                # HACK- fails on consecutive same char
+                if h.opA != t.opA: check = True
             if not check:
                 cmp_stack.append((i, t))
             else:
                 pass
                 # see microjson.py: decode_escape: ESC_MAP.get(c) why we cant always
                 # transfer tstr
-                #if isinstance(t.opA, str) and t.opA._idx > last_cmp_idx:
-                    #assert False
 
         return cmp_stack
 
@@ -183,11 +198,11 @@ class ExecFile(bex.ExecFile):
                 diverge, *satisfy = cmp_stack[v:]
                 lst_solutions = All_Characters
                 for i,elt in reversed(satisfy):
-                    assert elt.opA in [self.checked_char, self.last_fix]
+                    assert elt.opA == self.last_fix()
                     lst_solutions = self.extract_solutions(elt, lst_solutions, False)
                 # now we need to diverge here
                 i, elt = diverge
-                assert elt.opA in [self.checked_char, self.last_fix]
+                assert elt.opA == self.last_fix()
                 lst_solutions = self.extract_solutions(elt, lst_solutions, True)
                 if lst_solutions: break
                 v += 1
@@ -196,29 +211,70 @@ class ExecFile(bex.ExecFile):
             rand.remove(point_of_divergence)
         assert False
 
-    def kind(self, h):
-        pred = TrackerVM.COMPARE_OPERATORS[h.opnum]
-        cmp_result = pred(h.opA, h.opB)
+    def parsing_state(self, h):
         o = Op(h.opnum)
 
-        if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1:
+        if type(h.opA) is tstr:
+            if h.opA.x() == self.my_args[-1].x():
+                # A character comparison of the *last* char.
+                return (1, EState.Char, h)
+
+            elif h.opA.x() == len(self.my_args):
+                # An empty comparison at the EOF
+                return (1, EState.EOF, h)
+
+            elif o in CmpSet and len(h.opB) > 1:
+                # A string comparision rather than a character comparison.
+                return (1, EState.String, h)
+
+            elif len(h.opA) == 1 and h.opA.x() != self.my_args[-1].x():
+                # An early validation, where the comparison goes back to
+                # one of the early chars. Imagine when we use regex /[.0-9+-]/
+                # for int, and finally validate it with int(mystr)
+                return (1, EState.Trim, h)
+
+            else:
+                return (-1, EState.Unknown, (h, self.last_fix()))
+
+        # Everything from this point on is a HACK because the dynamic tainting
+        # failed.
+        elif h.opA == self.my_args[-1]:
+            # A character comparison of the *last* char.
+            return (2, EState.Char, h)
+
+        elif o in CmpSet and h.opA == '':
+            # What fails here: Imagine
+            # def peek(self):
+            #    if self.pos == self.len: return ''
+            # HACK
+            return (2, EState.EOF, h)
+
+        elif o in CmpSet and len(h.opB) > 1:
+            # what fails here: Imagine
+            #    ESC_MAP = {'true': 'True', 'false': 'false'}
+            #    t.opA = ESC_MAP[s]
+            # HACK
+            d()
             return (1, EState.String, h)
 
-        elif type(h.opA) is tstr and h.opA.x() == self.my_args[-1].x():
-            return (1, EState.Char, h)
-
-        elif type(h.opA) is tstr and len(h.opA) == 1 and h.opA.x() != self.my_args[-1].x():
+        elif len(h.opA) == 1 and h.opA != self.my_args[-1]:
+            # An early validation, where the comparison goes back to
+            # one of the early chars. Imagine when we use regex /[.0-9+-]/
+            # for int, and finally validate it with int(mystr)
             return (1, EState.Trim, h)
-
-        elif o in [Op.EQ, Op.IN, Op.NE, Op.NOT_IN] and h.opA == '':
-            return (1, EState.EOF, h)
-
-        elif h.opA == self.last_fix and o in [Op.IN, Op.EQ, Op.NOT_IN, Op.NE]:
-            # if the comparison is eq or in and it succeeded and the character
-            # compared was equal to last_fix, then this is the last match.
-            return (1, EState.Last, (h, self.checked_char, self.last_fix))
         else:
-            return (0, EState.Unknown, (h, self.checked_char, self.last_fix))
+            return (0, EState.Unknown, (h, self.last_fix()))
+
+    def matching(self, elt, lst):
+        largest, lelt = '', None
+        for e in lst:
+            common = os.path.commonprefix([elt, e])
+            if len(common) > len(largest):
+                largest, lelt = common, e
+        return largest, lelt
+
+    def last_fix(self):
+        return self.fixes[-1]
 
     def on_trace(self, i, traces, steps):
         a = self.my_args
@@ -226,37 +282,30 @@ class ExecFile(bex.ExecFile):
         # so get the comparison with the last element.
         while traces:
             h, *ltrace = traces
+            o = Op(h.opnum)
 
-            idx, k, info = self.kind(h)
+            idx, k, info = self.parsing_state(h)
             log((i, idx, k, info), 0)
 
-            if hasattr(self, 'last_step') and self.last_step is not None:
-                self.last_step == None
-                if steps > self.last_step:
-                    # our gamble paid off. So it was eof
-                    pass
-                else:
-                    # it was not eof. Try eating the last
-                    self.last_step = None
-                    return self.my_args[:-1]
-
             if k == EState.Char:
-                # my_args[-1]._idx is same as len(my_args) - 1
-                assert self.my_args[-1].x() == len(self.my_args) -1
+                # A character comparison of the *last* char.
                 # This was a character comparison. So collect all
-                # comparisions made using this character. until the
+                # comparisons made using this character. until the
                 # first comparison that was made otherwise.
                 cmp_stack = self.comparisons_on_last_char(h, traces)
                 # Now, try to fix the last failure
-                self.next_opts = self.get_correction(cmp_stack, lambda i: True)
-                new_char = self.choose_char(self.next_opts)
-                self.next_opts = [i for i in self.next_opts if i != new_char]
+                if h.opA == self.last_fix() and o in CmpSet:
+                    # Now, try to fix the last failure
+                    corr = self.get_correction(cmp_stack, lambda i: i not in self.fixes)
+                    if not corr: raise Exception('Exhausted attempts: %s' % self.fixes)
+                else:
+                    corr = self.get_correction(cmp_stack, lambda i: True)
+                    self.fixes = []
+
+                new_char = self.choose_char(corr)
                 arg = "%s%s" % (self.my_args[:-1], new_char)
 
-                self.last_fix = new_char
-                self.fixes = [self.last_fix]
-
-                self.checked_char = None
+                self.fixes.append(new_char)
                 return arg
             elif k == EState.Trim:
                 # we need to (1) find where h.opA._idx is within
@@ -266,49 +315,34 @@ class ExecFile(bex.ExecFile):
                 return args # VERIFY - TODO
 
             elif k == EState.String:
-                #assert h.opA == self.last_fix or h.opA == self.checked_char
-                common = os.path.commonprefix(h.oargs)
-                if self.checked_char:
-                    # if checked_char is present, it means we passed through
+                if o in [Op.IN, Op.NOT_IN]:
+                    opB = self.matching(h.opA, h.opB)
+                elif o in [Op.EQ, Op.NE]:
+                    opB = h.opB
+                else:
+                    assert False
+                common = os.path.commonprefix(h.opA, opB)
+                if self.last_fix():
+                    # if fix is present, it means we passed through
                     # EState.EOF
-                    assert h.opB[len(common)-1] == self.checked_char
+                    assert h.opB[len(common)-1] == self.last_fix()
                     arg = "%s%s" % (self.my_args, h.opB[len(common):])
-                elif self.last_fix:
-                    assert h.opB[len(common)-1] == self.last_fix
-                    arg = "%s%s" % (self.my_args, h.opB[len(common):])
-
-                self.last_fix = None
-                self.checked_char = None
+                    self.fixes = []
                 return arg
             elif k == EState.EOF:
+                # An empty comparison at the EOF
                 new_char = self.choose_char(All_Characters)
                 arg = "%s%s" % (self.my_args, new_char)
 
-                self.checked_char = new_char
-                self.last_fix = None
+                self.fixes = [new_char]
                 return arg
-            elif k == EState.Last:
-                # This was a character comparison. So collect all
-                # comparisions made using this character. until the
-                # first comparison that was made otherwise.
-                cmp_stack = self.comparisons_on_last_char(h, traces)
-                # Now, try to fix the last failure
-                self.next_opts = self.get_correction(cmp_stack, lambda i: i not in self.fixes and i != self.checked_char)
-                if not self.next_opts:
-                    raise Exception('Exhausted attempts: %s' % self.fixes)
-                new_char = self.choose_char(self.next_opts)
-                arg = "%s%s" % (self.my_args[:-1], new_char)
-
-                self.last_fix = new_char
-                self.fixes.append(self.last_fix)
-
-                self.checked_char = None
-                return arg
-            else:
-                # probably a late validation. trim the last and
+            elif k == EState.Unknown:
+                # Unknown what exactly happened. Strip the last and try again
                 # try again.
                 traces = ltrace
                 continue
+            else:
+                assert False
 
         return None
 
@@ -319,10 +353,9 @@ class ExecFile(bex.ExecFile):
             sys.argv[1] = self.my_args
         else:
             self.my_args = sys.argv[1]
-            self.last_fix = self.my_args[-2] if len(self.my_args) > 1 else None
             # The last_character assignment made is the first character assigned
             # when starting.
-            self.checked_char = self.my_args[-1]
+            self.fixes = [self.my_args[-1]]
 
         # replace interesting things
         # env['type'] = my_type
@@ -337,9 +370,9 @@ class ExecFile(bex.ExecFile):
                 log(">> %s" % self.my_args, 0)
                 v = vm.run_code(code, f_globals=env)
                 print('Arg: %s' % repr(self.my_args))
-                if random.uniform(0,1) > Return_Probability: # and len(self.my_args) < Min_Len
-                    self.checked_char = self.choose_char(All_Characters)
-                    self.my_args = tstr("%s%s" % (sys.argv[1], self.checked_char), idx=0)
+                if random.uniform(0,1) > Return_Probability:
+                    self.fixes = [self.choose_char(All_Characters)]
+                    self.my_args = tstr("%s%s" % (sys.argv[1], self.last_fix()), idx=0)
                     sys.argv[1] = self.my_args
                 else:
                     return v
@@ -360,8 +393,8 @@ class ExecFile(bex.ExecFile):
 
     def cmdline(self, argv):
         parser = argparse.ArgumentParser(
-            prog="bytevm",
-            description="Run Python programs with a Python bytecode interpreter.",
+            prog="pychains",
+            description="Find valid inputs for the given program.",
         )
         parser.add_argument(
             '-m', dest='module', action='store_true',
@@ -385,8 +418,8 @@ class ExecFile(bex.ExecFile):
         logging.basicConfig(level=level)
 
         self.my_args = []
-        self.checked_char = self.choose_char(All_Characters)
-        new_argv = [args.prog] + [tstr(self.checked_char, idx=0)]
+        self.fixes = [self.choose_char(All_Characters)]
+        new_argv = [args.prog] + [tstr(self.last_fix(), idx=0)]
         if args.module:
             self.run_python_module(args.prog, new_argv)
         else:

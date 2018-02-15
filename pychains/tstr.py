@@ -39,7 +39,7 @@ class tstr(str):
         return self._idx - self._unmapped_till + i
 
     def __add__(self, other):  #concatenation (+)
-        t =  tstr(str.__add__(other, self), idx=self._idx, unmapped_till=self._unmapped_till)
+        t =  tstr(str.__add__(self, other), idx=self._idx, unmapped_till=self._unmapped_till)
         return t
 
     def __radd__(self, other):  #concatenation (+) -- other is not tstr

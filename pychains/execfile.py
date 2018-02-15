@@ -35,6 +35,8 @@ Pickled = '.pickle/ExecFile-%s.pickle'
 
 Track = True
 
+InitiateBFS = True
+
 Debug=0
 
 All_Characters = list(string.printable + string.whitespace)
@@ -379,7 +381,7 @@ class ExecFile(bex.ExecFile):
                 else:
                     return v
             except Exception as e:
-                if i == MaxIter -1:
+                if i == MaxIter -1 and InitiateBFS:
                     return exec_code_object_bfs(code, env, self.my_args)
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)

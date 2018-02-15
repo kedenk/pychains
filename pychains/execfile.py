@@ -227,7 +227,11 @@ class ExecFile(bex.ExecFile):
                 # An empty comparison at the EOF
                 return (1, EState.EOF, h)
 
-            elif o in CmpSet and len(h.opB) > 1:
+            elif o in CmpSet and isinstance(h.opB, str) and len(h.opB) > 1:
+                # A string comparison rather than a character comparison.
+                return (1, EState.String, h)
+
+            elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
                 # A string comparison rather than a character comparison.
                 return (1, EState.String, h)
 
@@ -246,26 +250,29 @@ class ExecFile(bex.ExecFile):
             # A character comparison of the *last* char.
             return (2, EState.Char, h)
 
-        elif o in CmpSet and h.opA == '':
+        elif o in CmpSet and isinstance(h.opB, str) and h.opA == '':
             # What fails here: Imagine
             # def peek(self):
             #    if self.pos == self.len: return ''
             # HACK
             return (2, EState.EOF, h)
 
-        elif o in CmpSet and len(h.opB) > 1:
+        elif o in CmpSet and isinstance(h.opB, str) and len(h.opB) > 1:
             # what fails here: Imagine
             #    ESC_MAP = {'true': 'True', 'false': 'false'}
             #    t.opA = ESC_MAP[s]
             # HACK
-            d()
+            brk()
             return (1, EState.String, h)
 
-        elif len(h.opA) == 1 and h.opA != self.my_args[-1]:
-            # An early validation, where the comparison goes back to
-            # one of the early chars. Imagine when we use regex /[.0-9+-]/
-            # for int, and finally validate it with int(mystr)
-            return (1, EState.Trim, h)
+        elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
+            # A string comparison rather than a character comparison.
+            brk()
+            return (1, EState.String, h)
+
+        # elif len(h.opA) == 1 and h.opA != self.my_args[-1]:
+        # We cannot do this unless we have tainting. Use Unknown instead
+        #    return (1, EState.Trim, h)
         else:
             return (0, EState.Unknown, (h, self.last_fix()))
 
@@ -324,7 +331,7 @@ class ExecFile(bex.ExecFile):
                     opB = h.opB
                 else:
                     assert False
-                common = os.path.commonprefix(h.opA, opB)
+                common = os.path.commonprefix([h.opA, opB])
                 if self.last_fix():
                     # if fix is present, it means we passed through
                     # EState.EOF

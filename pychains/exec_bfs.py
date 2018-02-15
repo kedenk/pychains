@@ -152,7 +152,11 @@ def exec_code_object_bfs(code, env, next_input):
             #     current_Node = current_Node.parent
             if not node_list:
                 print("There is nothing we can do for you, something seems to be broken earlier.")
-                return
+                print("Restart with minimal string")
+                next_input = "A"
+                current_Node = Node(None, (0, 0, 0, 'B', [], 'A'))
+                continue
+
             current_Node = node_list.pop(0)
 
             # if current_Node == None:

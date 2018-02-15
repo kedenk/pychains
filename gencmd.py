@@ -8,7 +8,7 @@ if os.getenv('IMAX'): pychains.execfile.MaxIter = int(os.getenv('IMAX'))
 if os.getenv('DEBUG'): pychains.execfile.Debug = int(os.getenv('DEBUG'))
 if os.getenv('P'): pychains.execfile.Distribubtion = os.getenv('P')
 if os.getenv('ISTRATEGY'): pychains.execfile.Return_Probability = float(os.getenv('ISTRATEGY'))
-if os.getenv('TRACK'): pychains.execfile.Track = bool(os.getenv('TRACK'))
+if os.getenv('TRACK'): pychains.execfile.Track = os.getenv('TRACK') == 'true'
 if os.getenv('BFS'): pychains.execfile.InitiateBFS = os.getenv('BFS') == 'true'
 import sys
 pychains.execfile.Load = os.getenv('LOAD')

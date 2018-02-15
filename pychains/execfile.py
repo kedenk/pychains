@@ -315,7 +315,6 @@ class ExecFile(bex.ExecFile):
                 # we need to (1) find where h.opA._idx is within
                 # self.my_args, and trim self.my_args to that location
                 args = self.my_args[h.opA.x():]
-                import pudb; pudb.set_trace()
                 return args # VERIFY - TODO
 
             elif k == EState.String:

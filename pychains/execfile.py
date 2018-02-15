@@ -14,7 +14,7 @@ from .tstr import tstr
 from .exec_bfs import exec_code_object_bfs
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = 20
+MaxIter = 1000
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?

@@ -1,4 +1,3 @@
-import sys
 import bytevm.pyvm2 as pvm
 import enum
 

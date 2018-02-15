@@ -2,7 +2,7 @@ import random
 import pickle
 import os.path
 import string
-import sys
+import bytevm.sys as sys
 import argparse
 import logging
 import bytevm.execfile as bex
@@ -42,7 +42,7 @@ CmpSet = [Op.EQ, Op.NE, Op.IN, Op.NOT_IN]
 def log(var, i=1):
     if Debug >= i: print(repr(var), file=sys.stderr, flush=True)
 
-def d(v=True):
+def brk(v=True):
     if not v: return None
     import pudb
     pudb.set_trace()

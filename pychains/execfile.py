@@ -11,9 +11,10 @@ import enum
 import dataparser as dp
 from .vm import TrackerVM, Op
 from .tstr import tstr
+from .exec_bfs import exec_code_object_bfs
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = 1000
+MaxIter = 20
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
@@ -378,6 +379,8 @@ class ExecFile(bex.ExecFile):
                 else:
                     return v
             except Exception as e:
+                if i == MaxIter -1:
+                    return exec_code_object_bfs(code, env, self.my_args)
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)
                 save_trace(vm.byte_trace, i, file='byte')

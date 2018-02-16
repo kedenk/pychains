@@ -14,7 +14,7 @@ from .tstr import tstr
 from .exec_bfs import exec_code_object_bfs
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = 20
+MaxIter = 150
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
@@ -349,6 +349,9 @@ class ExecFile(bex.ExecFile):
         return None
 
     def exec_code_object(self, code, env):
+        seed = random.randrange(sys.maxsize)
+        print("Random seed " + str(seed))
+        random.seed(seed)
         self.start_i = 0
         if Load:
             self.load(Load)
@@ -363,6 +366,8 @@ class ExecFile(bex.ExecFile):
         # env['type'] = my_type
         env['int'] = my_int
         env['float'] = my_float
+
+        exec_code_object_bfs(code, env, self.my_args)
 
         for i in range(self.start_i, MaxIter):
             self.start_i = i

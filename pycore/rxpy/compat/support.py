@@ -27,7 +27,10 @@
 # above, a recipient may use your version of this file under either the 
 # MPL or the LGPL License.                                              
 
-from string import ascii_letters, digits
+ascii_lowercase = 'abcdefghijklmnopqrstuvwxyz'
+ascii_uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+ascii_letters = ascii_lowercase + ascii_uppercase
+digits = '0123456789'
 
 from rxpy.alphabet.ascii import Ascii
 from rxpy.alphabet.unicode import Unicode

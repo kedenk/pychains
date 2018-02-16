@@ -32,8 +32,10 @@ Support classes for parsing.
 '''                               
 
 
-from string import digits, ascii_letters
-
+ascii_lowercase = 'abcdefghijklmnopqrstuvwxyz'
+ascii_uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+ascii_letters = ascii_lowercase + ascii_uppercase
+digits = '0123456789'
 from rxpy.alphabet.ascii import Ascii
 from rxpy.alphabet.unicode import Unicode
 from rxpy.graph.post import resolve_group_names, post_process

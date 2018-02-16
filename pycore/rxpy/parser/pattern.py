@@ -39,7 +39,11 @@ those references (ultimately accumulating the graph nodes in the root
 '''
 
 from itertools import count
-from string import digits, ascii_letters
+
+ascii_lowercase = 'abcdefghijklmnopqrstuvwxyz'
+ascii_uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+ascii_letters = ascii_lowercase + ascii_uppercase
+digits = '0123456789'
 
 from rxpy.graph.container import Sequence, Alternatives, Loop, Optional,\
     CountedLoop
@@ -889,4 +893,3 @@ def parse_groups(texts, engine, flags=0, alphabet=None):
     if state.has_new_flags:
         raise RxpyException('Inconsistent flags')
     return (state, sequence.to_sequence().join(Match(), state))
-        

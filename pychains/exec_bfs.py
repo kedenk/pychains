@@ -9,6 +9,8 @@ import string
 import random
 import json
 
+MaxIter = 3000000
+
 from .vm_bfs import GetComparisons, Operator, Functions
 
 # This code is ripped off from coverage.py.  Define things it expects.
@@ -18,6 +20,9 @@ except:
     def open_source(fname):
         """Open a source file the best way."""
         return open(fname, "rU")
+
+def log(v):
+    print(v, file=sys.stderr)
 
 NoSource = Exception
 
@@ -84,7 +89,6 @@ class Node:
 comparison_equality_chain = 3
 
 def exec_code_object_bfs(code, env, next_input):
-    random.seed(42)
     vm = GetComparisons()
     # I currently assume that the string does only contain one 'A', therefore all existing A's are placed with B's
     next_input = str(next_input).replace("A","B") + "A"
@@ -95,7 +99,7 @@ def exec_code_object_bfs(code, env, next_input):
     already_seen = set()
     with open("outputs.txt","w") as outputs:
         # do not fun infinitely long, in future we might want to add some stopping criterion here
-        for i in range(1, 3000000):
+        for i in range(1, MaxIter):
             # TODO add duplicate pruning
 
             #prepare the VM for running on the given input
@@ -103,17 +107,17 @@ def exec_code_object_bfs(code, env, next_input):
             # outputs.write(next_input + "\n")
             vm.clean([next_input])
             current_change_pos = current_Node.get_observation_pos()
-            print("#############")
+            log("#############")
             # we might run into exceptions since we produce invalid inputs
             # we catch those exceptions and produce a new input based on the gained knowledge through the
             # execution
-            print(repr(next_input))
+            log(repr(next_input))
 
             # run the VM
             try:
                 vm.run_code(code, f_globals=env)
             except Exception as e:
-                print(e)
+                log(e)
 
             # get the next inputs from the VM based on the trace
             next_inputs = vm.get_next_inputs(current_Node.get_observation_pos())
@@ -138,7 +142,7 @@ def exec_code_object_bfs(code, env, next_input):
                     # comparisons = print_comp(node)
                     # outputs.write("{\n\t\"" + node.get_substituted_string() +"\":{\n" + comparisons + "\n}\n")
                     outputs.write(repr(node.get_substituted_string()) + "\n")
-                    print("Arg: " + repr(node.get_substituted_string()))
+                    log("Arg: " + repr(node.get_substituted_string()))
                     return
 
             # add the surviving nodes to the current node, since those are its children
@@ -151,8 +155,8 @@ def exec_code_object_bfs(code, env, next_input):
             # while current_Node is not None and not current_Node.child_exists():
             #     current_Node = current_Node.parent
             if not node_list:
-                print("There is nothing we can do for you, something seems to be broken earlier.")
-                print("Restart with minimal string")
+                log("There is nothing we can do for you, something seems to be broken earlier.")
+                log("Restart with minimal string")
                 next_input = "A"
                 current_Node = Node(None, (0, 0, 0, 'B', [], 'A'))
                 continue

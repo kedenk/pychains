@@ -1,6 +1,12 @@
 import bytevm.pyvm2 as pvm
 import enum
 
+
+def brk(v=True):
+    if not v: return None
+    import pudb
+    pudb.set_trace()
+
 class Op(enum.Enum):
     LT = 0
     LE = enum.auto()
@@ -50,6 +56,9 @@ class TrackerVM(pvm.VirtualMachine):
         super().byte_LOAD_GLOBAL(name)
 
     def byte_LOAD_NAME(self, name):
+        if name == 'brk':
+            brk()
+            return
         super().byte_LOAD_NAME(name)
 
     def byte_IMPORT_NAME(self, name):
@@ -64,9 +73,8 @@ class TrackerVM(pvm.VirtualMachine):
         else:
             super().byte_IMPORT_NAME(name)
 
-    def byte_CALL_FUNCTION(self, arg):
-        return super().byte_CALL_FUNCTION(arg)
-
+    def call_function(self, arg, args, kwargs):
+        return super().call_function(arg, args, kwargs)
 
     def parse_byte_and_args(self):
         byteName, arguments, offset = super().parse_byte_and_args()

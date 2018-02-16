@@ -2,7 +2,7 @@
 
 import imp
 import os
-import sys
+import bytevm.sys as sys
 import tokenize
 import queue
 import string

@@ -257,18 +257,20 @@ class ExecFile(bex.ExecFile):
             # HACK
             return (2, EState.EOF, h)
 
-        elif o in CmpSet and isinstance(h.opB, str) and len(h.opB) > 1:
-            # what fails here: Imagine
-            #    ESC_MAP = {'true': 'True', 'false': 'false'}
-            #    t.opA = ESC_MAP[s]
-            # HACK
-            brk()
-            return (1, EState.String, h)
+        # elif o in CmpSet and isinstance(h.opB, str) and len(h.opB) > 1:
+        # # Disabling this unless we have no other choice because too many
+        # string version comparisons in source loading.
+        #     # what fails here: Imagine
+        #     #    ESC_MAP = {'true': 'True', 'false': 'false'}
+        #     #    t.opA = ESC_MAP[s]
+        #     # HACK
+        #     brk()
+        #     return (1, EState.String, h)
 
-        elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
-            # A string comparison rather than a character comparison.
-            brk()
-            return (1, EState.String, h)
+        # elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
+        #     # A string comparison rather than a character comparison.
+        #     brk()
+        #     return (1, EState.String, h)
 
         # elif len(h.opA) == 1 and h.opA != self.my_args[-1]:
         # We cannot do this unless we have tainting. Use Unknown instead

@@ -3,9 +3,9 @@
 # pyvm2 by Paul Swartz (z3p), from http://www.twistedmatrix.com/users/z3p/
 
 from __future__ import print_function, division
-import sys
 
 from bytevm.pyvm2 import VirtualMachine
+import bytevm.sys as sys
 from enum import Enum
 from random import shuffle
 import string
@@ -43,11 +43,11 @@ class GetComparisons(VirtualMachine):
 
     def __init__(self):
         # The call stack of frames.
-        self.frames = []
+        #self.frames = []
         # The current frame.
-        self.frame = None
-        self.return_value = None
-        self.last_exception = None
+        #self.frame = None
+        #self.return_value = None
+        #self.last_exception = None
         self.args = sys.argv[1:]
         self.load_from = None # indicates from which object the last function was loaded
         self.functions()

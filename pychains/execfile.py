@@ -229,6 +229,14 @@ class ExecFile(bex.ExecFile):
         o = Op(h.opnum)
 
         if type(h.opA) is tstr:
+            if o in CmpSet and isinstance(h.opB, str) and len(h.opB) > 1:
+                # A string comparison rather than a character comparison.
+                return (1, EState.String, h)
+
+            elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
+                # A string comparison rather than a character comparison.
+                return (1, EState.String, h)
+
             if h.opA.x() == self.sys_args()[-1].x():
                 # A character comparison of the *last* char.
                 return (1, EState.Char, h)
@@ -236,14 +244,6 @@ class ExecFile(bex.ExecFile):
             elif h.opA.x() == len(self.sys_args()):
                 # An empty comparison at the EOF
                 return (1, EState.EOF, h)
-
-            elif o in CmpSet and isinstance(h.opB, str) and len(h.opB) > 1:
-                # A string comparison rather than a character comparison.
-                return (1, EState.String, h)
-
-            elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
-                # A string comparison rather than a character comparison.
-                return (1, EState.String, h)
 
             elif len(h.opA) == 1 and h.opA.x() != self.sys_args()[-1].x():
                 # An early validation, where the comparison goes back to

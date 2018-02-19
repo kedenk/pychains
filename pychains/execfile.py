@@ -13,6 +13,8 @@ from .vm import TrackerVM, Op
 from .tstr import tstr
 from .exec_bfs import exec_code_object_bfs
 
+RandomSeed = os.getenv('R')
+
 #  Maximum iterations of fixing exceptions that we try before giving up.
 MaxIter = 1000
 
@@ -307,7 +309,7 @@ class ExecFile(bex.ExecFile):
             o = Op(h.opnum)
 
             idx, k, info = self.parsing_state(h)
-            log((i, idx, k, info), 0)
+            log((RandomSeed, i, idx, k, info, "is tstr", isinstance(h.opA, tstr)), 0)
 
             if k == EState.Char:
                 # A character comparison of the *last* char.

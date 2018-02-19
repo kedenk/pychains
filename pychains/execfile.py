@@ -310,6 +310,10 @@ class ExecFile(bex.ExecFile):
             idx, k, info = self.parsing_state(h)
             log((i, idx, k, info), 0)
 
+            # fixes are characters that have been tried at that particular
+            # position already.
+            fixes = self.fixes
+
             if k == EState.Char:
                 # A character comparison of the *last* char.
                 # This was a character comparison. So collect all
@@ -319,22 +323,21 @@ class ExecFile(bex.ExecFile):
                 # Now, try to fix the last failure
                 if h.opA == self.last_fix() and o in CmpSet:
                     # Now, try to fix the last failure
-                    corr = self.get_corrections(cmp_stack, lambda i: i not in self.fixes)
-                    if not corr: raise Exception('Exhausted attempts: %s' % self.fixes)
+                    corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
+                    if not corr: raise Exception('Exhausted attempts: %s' % fixes)
                 else:
                     corr = self.get_corrections(cmp_stack, lambda i: True)
-                    self.fixes = []
+                    fixes = []
 
                 new_char = self.choose_char(random.choice(corr))
                 arg = "%s%s" % (self.sys_args()[:-1], new_char)
 
-                self.fixes.append(new_char)
-                return arg
+                return (fixes + [new_char], arg)
             elif k == EState.Trim:
                 # we need to (1) find where h.opA._idx is within
                 # self.sys_args, and trim self.sys_args to that location
                 args = self.sys_args()[h.opA.x():]
-                return args # VERIFY - TODO
+                return ([], args) # VERIFY - TODO
 
             elif k == EState.String:
                 if o in [Op.IN, Op.NOT_IN]:
@@ -344,20 +347,21 @@ class ExecFile(bex.ExecFile):
                 else:
                     assert False
                 common = os.path.commonprefix([h.opA, opB])
-                if self.last_fix():
+                if fixes:
                     # if fix is present, it means we passed through
                     # EState.EOF
                     assert h.opB[len(common)-1] == self.last_fix()
                     arg = "%s%s" % (self.sys_args(), h.opB[len(common):])
-                    self.fixes = []
-                return arg
+                    return ([], arg)
+                else:
+                    # we dont know what we are doing.
+                    continue
             elif k == EState.EOF:
                 # An empty comparison at the EOF
                 new_char = self.choose_char(All_Characters)
                 arg = "%s%s" % (self.sys_args(), new_char)
 
-                self.fixes = [new_char]
-                return arg
+                return ([new_char], arg)
             elif k == EState.Unknown:
                 # Unknown what exactly happened. Strip the last and try again
                 # try again.
@@ -370,19 +374,19 @@ class ExecFile(bex.ExecFile):
 
     def exec_code_object(self, code, env):
         self.start_i = 0
-        if Load:
-            self.load(Load)
-            sys.argv[1] = self.sys_args()
-        else:
-            self.add_sys_args(sys.argv[1])
-            # The last_character assignment made is the first character assigned
-            # when starting.
-            self.fixes = [self.sys_args()[-1]]
+        if Load: self.load(Load)
 
         # replace interesting things
         # env['type'] = my_type
         env['int'] = my_int
         env['float'] = my_float
+
+        fix = self.choose_char(All_Characters)
+        self.add_sys_args(fix)
+        # The last_character assignment made is the first character assigned
+        # when starting.
+        self.fixes = [fix]
+        sys.argv.append(fix)
 
         for i in range(self.start_i, MaxIter):
             self.start_i = i
@@ -405,7 +409,7 @@ class ExecFile(bex.ExecFile):
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)
                 save_trace(vm.byte_trace, i, file='byte')
-                t = self.on_trace(i, traces, vm.steps)
+                fixes, t = self.on_trace(i, traces, vm.steps)
                 if not t:
                     # remove one character and try again.
                     self.add_sys_args(self.sys_args()[:-1])
@@ -415,9 +419,9 @@ class ExecFile(bex.ExecFile):
                     # we failed utterly
                     raise Exception('No suitable continuation found')
                 sys.argv[1] = self.sys_args()
+                self.fixes = fixes
 
     def reinit(self):
-        self.fixes = [self.choose_char(All_Characters)]
         self.initiate_bfs = False
         self._my_args = []
 
@@ -448,8 +452,4 @@ class ExecFile(bex.ExecFile):
         logging.basicConfig(level=level)
 
         self.reinit()
-        new_argv = [args.prog] + [self.last_fix()]
-        if args.module:
-            self.run_python_module(args.prog, new_argv)
-        else:
-            self.run_python_file(args.prog, new_argv)
+        self.run_python_file(args.prog, [args.prog] + args.args)

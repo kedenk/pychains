@@ -158,7 +158,7 @@ def compile(regex, stack, counter):
         stack.pop()
         stack[-1].append(stacktop[-1])
 
-    if c == "*":
+    if c == "*" and regex[counter - 1] != "\\":
         el = stacktop.pop()
         stacktop.append(Repetition(el))
 
@@ -175,25 +175,61 @@ def compile(regex, stack, counter):
 
 
     if c not in ["(", "|", "*", ")"]:
-        if stacktop:
-            el = stacktop.pop()
-            stacktop.append(Sequence(el, Char(c)))
+        if c == "." and regex[counter - 1] != "\\":
+            cmp = compile("a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z", [[]], 0)
+            add_to_stacktop(cmp, stacktop)
+        elif c == "#" and regex[counter - 1] != "\\":
+            cmp = compile("0|1|2|3|4|5|6|7|8|9", [[]], 0)
+            add_to_stacktop(cmp, stacktop)
+        elif c == "\\" and regex[counter - 1] != "\\":
+            return compile(regex, stack, counter + 1)
         else:
-            stacktop.append(Char(c))
+            add_to_stacktop(Char(c), stacktop)
 
     return compile(regex, stack, counter + 1)
 
 
+def add_to_stacktop(c, stacktop):
+    if stacktop:
+        el = stacktop.pop()
+        stacktop.append(Sequence(el, c))
+    else:
+        stacktop.append(c)
 
+
+# braces "(" and ")" are used to delimit syntactic elements
+# "#" is used to represent numbers
+# "." is used to represent letters [a-z]
+# "|", "(" and ")" cannot be escaped at the moment
 if __name__ == "__main__":
     import sys
+    to_match = sys.argv[1]
 
-    # regex = Sequence(Char('b'), Char('s'))
-    regex = compile("((b((a|s)*))|c)*c", [[]], 0)
-    # regex = compile("ab*", [[]], 0)
+    #json object
+    # to_match = "{\"hello\":[\"world\",\"test\"]}"
+
+    # https url
+    # to_match = "https://www.cispa.de#mainpage?ab=de"
+
+    # cgi
+    # to_match = "asd+qwer%64tts"
+
+    # artificial regex example
+    # regex = compile("((b((a|s)*))|c)*c", [[]], 0)
+
+    # json object regex
+    regex = compile("{\"(.*)\":[\"(.*)\",\"(.*)\"]}", [[]], 0)
+
+    # https url regex
+    # regex = compile("https://www\\.(.*)\\.(..|...|....)\\#(.*)?(.*)=(.*)", [[]], 0)
+
+    # simple cgi regex
+    # regex = compile("(.|+|%##)*", [[]], 0)
+
     print(repr(regex))
+    print(regex)
     # regex = Sequence(Char('{'), Sequence(Alternative(Alternative(Char('a'), Char('b')), Char('c')), Repetition(Sequence(Char('d'), Char('e')))))
-    if not match(regex, sys.argv[1]):
+    if not match(regex, to_match):
         raise ValueError("Input string does not match regex")
 
-    print(match(regex, sys.argv[1]))
+    print(match(regex, to_match))

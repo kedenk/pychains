@@ -118,14 +118,14 @@ class GetComparisons(VirtualMachine):
         return -1
 
 
-    def byte_CALL_FUNCTION(self, arg):
+    def call_function(self, arg, func_args, kwargs):
         self.line_already_seen()
         args = self.topn(arg + 1)
         func_watched = self.function_watched(str(args[0]))
         if func_watched != -1:
             self.trace.append((Functions(Functions.starting_value.value + func_watched + 1), [self.load_from] + args))
 
-        return VirtualMachine.byte_CALL_FUNCTION(self, arg)
+        return VirtualMachine.call_function(self, arg, func_args, kwargs)
 
 
     def byte_LOAD_ATTR(self, attr):

@@ -100,8 +100,6 @@ def exec_code_object_bfs(code, env, next_input):
     with open("outputs.txt","w") as outputs:
         # do not fun infinitely long, in future we might want to add some stopping criterion here
         for i in range(1, MaxIter):
-            # TODO add duplicate pruning
-
             #prepare the VM for running on the given input
             sys.argv[1] = next_input
             # outputs.write(next_input + "\n")

@@ -377,7 +377,7 @@ class ExecFile(bex.ExecFile):
         env['int'] = my_int
         env['float'] = my_float
 
-        exec_code_object_bfs(code, env, self.my_args)
+        # return exec_code_object_bfs(code, env, "")
 
         for i in range(self.start_i, MaxIter):
             self.start_i = i

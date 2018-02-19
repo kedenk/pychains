@@ -96,10 +96,10 @@ class ExecFile(bex.ExecFile):
 
     def add_sys_args(self, var):
         if type(var) is not tstr: var = create_arg(var)
-        self._my_args = var
+        self._my_args.append(var)
 
     def sys_args(self):
-        return self._my_args
+        return self._my_args[-1]
 
     # Load the pickled state and also set the random set.
     # Used to start execution at arbitrary iterations.
@@ -397,6 +397,7 @@ class ExecFile(bex.ExecFile):
                     return v
             except Exception as e:
                 if i == MaxIter -1 and InitiateBFS:
+                    self.initiate_bfs = True
                     return exec_code_object_bfs(code, env, self.sys_args())
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)
@@ -411,6 +412,11 @@ class ExecFile(bex.ExecFile):
                     # we failed utterly
                     raise Exception('No suitable continuation found')
                 sys.argv[1] = self.sys_args()
+
+    def reinit(self):
+        self.fixes = [self.choose_char(All_Characters)]
+        self.initiate_bfs = False
+        self._my_args = []
 
     def cmdline(self, argv):
         parser = argparse.ArgumentParser(
@@ -438,7 +444,7 @@ class ExecFile(bex.ExecFile):
         level = logging.DEBUG if args.verbose else logging.WARNING
         logging.basicConfig(level=level)
 
-        self.fixes = [self.choose_char(All_Characters)]
+        self.reinit()
         new_argv = [args.prog] + [self.last_fix()]
         if args.module:
             self.run_python_module(args.prog, new_argv)

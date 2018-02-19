@@ -34,8 +34,7 @@ and escaped characters.
 '''                                         
 
 
-from string import digits
-
+digits = '0123456789'
 from rxpy.lib import RxpyException
 from rxpy.graph.container import Sequence
 from rxpy.graph.opcode import GroupReference, Match, String

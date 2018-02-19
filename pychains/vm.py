@@ -27,13 +27,10 @@ class TraceOp:
         self.opA, self.opB = oargs
         self._r = None
 
-    def to_loc(self):
-        return "%s:%s %s" % self.lineinfo
-
     def __repr__(self):
         if not self._r:
             self.result = pvm.VirtualMachine.COMPARE_OPERATORS[self.opnum](self.opA, self.opB)
-            self._r = "%s %s %s %s" % (Op(self.opnum).name, self.oargs, self.result, self.to_loc())
+            self._r = "%s %s %s %s" % (Op(self.opnum).name, self.oargs, self.result, self.lineinfo)
         return self._r
 
 class TrackerVM(pvm.VirtualMachine):
@@ -46,7 +43,7 @@ class TrackerVM(pvm.VirtualMachine):
     def byte_COMPARE_OP(self, opnum):
         # Get the comparions. The filtering can be done later if needed.
         opA, opB = self.frame.stack[-2:]
-        self.cmp_trace.append(TraceOp(opnum, [opA, opB], (self.fn, self.line, self.cn)))
+        self.cmp_trace.append(TraceOp(opnum, [opA, opB], self.w()))
         super().byte_COMPARE_OP(opnum)
 
     def byte_LOAD_ATTR(self, name):

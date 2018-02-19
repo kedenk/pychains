@@ -188,6 +188,25 @@ class ExecFile(bex.ExecFile):
                 lst = [c for c in lst_solutions if not myfn(c, elt.opB)]
             return lst
 
+    def get_lst_solutions_at_divergence(self, cmp_stack, v):
+        # if we dont get a solution by inverting the last comparison, go one
+        # step back and try inverting it again.
+        stack_size = len(cmp_stack)
+        while v < stack_size:
+            # now, we need to skip everything till v
+            diverge, *satisfy = cmp_stack[v:]
+            lst_solutions = All_Characters
+            for i,elt in reversed(satisfy):
+                assert elt.opA == self.last_fix()
+                lst_solutions = self.extract_solutions(elt, lst_solutions, False)
+            # now we need to diverge here
+            i, elt = diverge
+            assert elt.opA == self.last_fix()
+            lst_solutions = self.extract_solutions(elt, lst_solutions, True)
+            if lst_solutions:
+                return lst_solutions
+            v += 1
+        return []
 
     def get_correction(self, cmp_stack, constraints):
         """
@@ -196,30 +215,14 @@ class ExecFile(bex.ExecFile):
         somewhere and generate a character that conforms to everything until then.
         """
         stack_size = len(cmp_stack)
-        rand = list(range(stack_size))
+        lst_positions = list(range(stack_size))
 
-        while rand:
-            point_of_divergence = random.choice(rand)
-            v = point_of_divergence
-
-            # if we dont get a solution by inverting the last comparison, go one
-            # step back and try inverting it again.
-            while v < stack_size:
-                # now, we need to skip everything till v
-                diverge, *satisfy = cmp_stack[v:]
-                lst_solutions = All_Characters
-                for i,elt in reversed(satisfy):
-                    assert elt.opA == self.last_fix()
-                    lst_solutions = self.extract_solutions(elt, lst_solutions, False)
-                # now we need to diverge here
-                i, elt = diverge
-                assert elt.opA == self.last_fix()
-                lst_solutions = self.extract_solutions(elt, lst_solutions, True)
-                if lst_solutions: break
-                v += 1
+        while lst_positions:
+            point_of_divergence = random.choice(lst_positions)
+            lst_solutions = self.get_lst_solutions_at_divergence(cmp_stack, point_of_divergence)
             lst = [l for l in lst_solutions if constraints(l)]
             if lst: return lst
-            rand.remove(point_of_divergence)
+            lst_positions.remove(point_of_divergence)
         assert False
 
     def parsing_state(self, h):

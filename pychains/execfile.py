@@ -229,7 +229,9 @@ class ExecFile(bex.ExecFile):
         o = Op(h.opnum)
 
         if type(h.opA) is tstr:
-            if o in CmpSet and isinstance(h.opB, str) and len(h.opB) > 1:
+            if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1:
+                # Dont add IN and NOT_IN -- '0' in '0123456789' is a common
+                # technique in char comparision to check for digits
                 # A string comparison rather than a character comparison.
                 return (1, EState.String, h)
 

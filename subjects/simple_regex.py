@@ -33,7 +33,7 @@ class Char(Regex):
         return self.c
 
     def __repr__(self):
-        return str(self)
+        return "Char(\'" + str(self) + "\')"
 
 class Epsilon(Regex):
     def __init__(self):
@@ -68,7 +68,7 @@ class Alternative(Binary):
         return "(%s|%s)" % (str(self.left), str(self.right))
 
     def __repr__(self):
-        return str(self)
+        return "Alternative(%s, %s)" % (repr(self.left), repr(self.right))
 
 class Repetition(Regex):
     def __init__(self, re):
@@ -86,7 +86,7 @@ class Repetition(Regex):
         return "(%s)*" % self.re
 
     def __repr__(self):
-        return str(self)
+        return "Repetition(%s)" % (repr(self.re))
 
 class Sequence(Binary):
     def __init__(self, left, right):
@@ -104,7 +104,7 @@ class Sequence(Binary):
         return str(self.left) + str(self.right)
 
     def __repr__(self):
-        return str(self)
+        return "Sequence(%s, %s)" % (repr(self.left), repr(self.right))
 
 def match(re, s):
     if not s:
@@ -187,8 +187,11 @@ def compile(regex, stack, counter):
 
 if __name__ == "__main__":
     import sys
-    # regex = compile("((b((a|s)*))|c)*c", [[]], 0)
-    regex = compile("ab*", [[]], 0)
+
+    # regex = Sequence(Char('b'), Char('s'))
+    regex = compile("((b((a|s)*))|c)*c", [[]], 0)
+    # regex = compile("ab*", [[]], 0)
+    print(repr(regex))
     # regex = Sequence(Char('{'), Sequence(Alternative(Alternative(Char('a'), Char('b')), Char('c')), Repetition(Sequence(Char('d'), Char('e')))))
     if not match(regex, sys.argv[1]):
         raise ValueError("Input string does not match regex")

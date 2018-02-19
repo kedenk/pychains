@@ -208,22 +208,22 @@ class ExecFile(bex.ExecFile):
             v += 1
         return []
 
-    def get_correction(self, cmp_stack, constraints):
+    def get_corrections(self, cmp_stack, constraints):
         """
         cmp_stack contains a set of comparions, with the last comparison made
         at the top of the stack, and first at the bottom. Choose a point
         somewhere and generate a character that conforms to everything until then.
         """
         stack_size = len(cmp_stack)
-        lst_positions = list(range(stack_size))
+        lst_positions = list(range(stack_size-1,-1,-1))
+        solutions = []
 
-        while lst_positions:
-            point_of_divergence = random.choice(lst_positions)
+        for point_of_divergence in lst_positions:
             lst_solutions = self.get_lst_solutions_at_divergence(cmp_stack, point_of_divergence)
             lst = [l for l in lst_solutions if constraints(l)]
-            if lst: return lst
-            lst_positions.remove(point_of_divergence)
-        assert False
+            if lst:
+                solutions.append(lst)
+        return solutions
 
     def parsing_state(self, h):
         o = Op(h.opnum)
@@ -319,13 +319,13 @@ class ExecFile(bex.ExecFile):
                 # Now, try to fix the last failure
                 if h.opA == self.last_fix() and o in CmpSet:
                     # Now, try to fix the last failure
-                    corr = self.get_correction(cmp_stack, lambda i: i not in self.fixes)
+                    corr = self.get_corrections(cmp_stack, lambda i: i not in self.fixes)
                     if not corr: raise Exception('Exhausted attempts: %s' % self.fixes)
                 else:
-                    corr = self.get_correction(cmp_stack, lambda i: True)
+                    corr = self.get_corrections(cmp_stack, lambda i: True)
                     self.fixes = []
 
-                new_char = self.choose_char(corr)
+                new_char = self.choose_char(random.choice(corr))
                 arg = "%s%s" % (self.sys_args()[:-1], new_char)
 
                 self.fixes.append(new_char)

@@ -94,6 +94,13 @@ def save_trace(traces, i, file='trace'):
 
 class ExecFile(bex.ExecFile):
 
+    def add_sys_args(self, var):
+        if type(var) is not tstr: var = create_arg(var)
+        self._my_args = var
+
+    def sys_args(self):
+        return self._my_args
+
     # Load the pickled state and also set the random set.
     # Used to start execution at arbitrary iterations.
     # requires prior dump
@@ -113,14 +120,14 @@ class ExecFile(bex.ExecFile):
             # A cumulative distribution where characters that have not
             # appeared until now are given equally higher weight.
             myarr = {i:1 for i in All_Characters}
-            for i in self.my_args: myarr[i] += 1
+            for i in self.sys_args(): myarr[i] += 1
             my_weights = [1/myarr[l] for l in lst]
             return random.choices(lst, weights=my_weights, k=1)[0]
         elif Distribution=='X':
             # A cumulative distribution where characters that have not
             # appeared in last 100 are given higher weight.
             myarr = {i:1 for i in All_Characters}
-            for i in set(self.my_args[-100:]):
+            for i in set(self.sys_args()[-100:]):
                 myarr[i] += 10
             my_weights = [1/myarr[l] for l in lst]
             return random.choices(lst, weights=my_weights, k=1)[0]
@@ -219,11 +226,11 @@ class ExecFile(bex.ExecFile):
         o = Op(h.opnum)
 
         if type(h.opA) is tstr:
-            if h.opA.x() == self.my_args[-1].x():
+            if h.opA.x() == self.sys_args()[-1].x():
                 # A character comparison of the *last* char.
                 return (1, EState.Char, h)
 
-            elif h.opA.x() == len(self.my_args):
+            elif h.opA.x() == len(self.sys_args()):
                 # An empty comparison at the EOF
                 return (1, EState.EOF, h)
 
@@ -235,7 +242,7 @@ class ExecFile(bex.ExecFile):
                 # A string comparison rather than a character comparison.
                 return (1, EState.String, h)
 
-            elif len(h.opA) == 1 and h.opA.x() != self.my_args[-1].x():
+            elif len(h.opA) == 1 and h.opA.x() != self.sys_args()[-1].x():
                 # An early validation, where the comparison goes back to
                 # one of the early chars. Imagine when we use regex /[.0-9+-]/
                 # for int, and finally validate it with int(mystr)
@@ -246,7 +253,7 @@ class ExecFile(bex.ExecFile):
 
         # Everything from this point on is a HACK because the dynamic tainting
         # failed.
-        elif h.opA == self.my_args[-1]:
+        elif h.opA == self.sys_args()[-1]:
             # A character comparison of the *last* char.
             return (2, EState.Char, h)
 
@@ -272,7 +279,7 @@ class ExecFile(bex.ExecFile):
         #     brk()
         #     return (1, EState.String, h)
 
-        # elif len(h.opA) == 1 and h.opA != self.my_args[-1]:
+        # elif len(h.opA) == 1 and h.opA != self.sys_args()[-1]:
         # We cannot do this unless we have tainting. Use Unknown instead
         #    return (1, EState.Trim, h)
         else:
@@ -290,7 +297,7 @@ class ExecFile(bex.ExecFile):
         return self.fixes[-1]
 
     def on_trace(self, i, traces, steps):
-        a = self.my_args
+        a = self.sys_args()
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
         while traces:
@@ -316,14 +323,14 @@ class ExecFile(bex.ExecFile):
                     self.fixes = []
 
                 new_char = self.choose_char(corr)
-                arg = "%s%s" % (self.my_args[:-1], new_char)
+                arg = "%s%s" % (self.sys_args()[:-1], new_char)
 
                 self.fixes.append(new_char)
                 return arg
             elif k == EState.Trim:
                 # we need to (1) find where h.opA._idx is within
-                # self.my_args, and trim self.my_args to that location
-                args = self.my_args[h.opA.x():]
+                # self.sys_args, and trim self.sys_args to that location
+                args = self.sys_args()[h.opA.x():]
                 return args # VERIFY - TODO
 
             elif k == EState.String:
@@ -338,13 +345,13 @@ class ExecFile(bex.ExecFile):
                     # if fix is present, it means we passed through
                     # EState.EOF
                     assert h.opB[len(common)-1] == self.last_fix()
-                    arg = "%s%s" % (self.my_args, h.opB[len(common):])
+                    arg = "%s%s" % (self.sys_args(), h.opB[len(common):])
                     self.fixes = []
                 return arg
             elif k == EState.EOF:
                 # An empty comparison at the EOF
                 new_char = self.choose_char(All_Characters)
-                arg = "%s%s" % (self.my_args, new_char)
+                arg = "%s%s" % (self.sys_args(), new_char)
 
                 self.fixes = [new_char]
                 return arg
@@ -362,12 +369,12 @@ class ExecFile(bex.ExecFile):
         self.start_i = 0
         if Load:
             self.load(Load)
-            sys.argv[1] = self.my_args
+            sys.argv[1] = self.sys_args()
         else:
-            self.my_args = sys.argv[1]
+            self.add_sys_args(sys.argv[1])
             # The last_character assignment made is the first character assigned
             # when starting.
-            self.fixes = [self.my_args[-1]]
+            self.fixes = [self.sys_args()[-1]]
 
         # replace interesting things
         # env['type'] = my_type
@@ -379,31 +386,31 @@ class ExecFile(bex.ExecFile):
             if Dump: self.dump()
             vm = TrackerVM()
             try:
-                log(">> %s" % self.my_args, 0)
+                log(">> %s" % self.sys_args(), 0)
                 v = vm.run_code(code, f_globals=env)
-                print('Arg: %s' % repr(self.my_args))
+                print('Arg: %s' % repr(self.sys_args()))
                 if random.uniform(0,1) > Return_Probability:
                     self.fixes = [self.choose_char(All_Characters)]
-                    self.my_args = create_arg("%s%s" % (sys.argv[1], self.last_fix()))
-                    sys.argv[1] = self.my_args
+                    self.add_sys_args("%s%s" % (sys.argv[1], self.last_fix()))
+                    sys.argv[1] = self.sys_args()
                 else:
                     return v
             except Exception as e:
                 if i == MaxIter -1 and InitiateBFS:
-                    return exec_code_object_bfs(code, env, self.my_args)
+                    return exec_code_object_bfs(code, env, self.sys_args())
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)
                 save_trace(vm.byte_trace, i, file='byte')
                 t = self.on_trace(i, traces, vm.steps)
                 if not t:
                     # remove one character and try again.
-                    self.my_args = self.my_args[:-1]
+                    self.add_sys_args(self.sys_args()[:-1])
                 else:
-                    self.my_args = create_arg(t)
-                if not self.my_args:
+                    self.add_sys_args(t)
+                if not self.sys_args():
                     # we failed utterly
                     raise Exception('No suitable continuation found')
-                sys.argv[1] = self.my_args
+                sys.argv[1] = self.sys_args()
 
     def cmdline(self, argv):
         parser = argparse.ArgumentParser(
@@ -431,9 +438,8 @@ class ExecFile(bex.ExecFile):
         level = logging.DEBUG if args.verbose else logging.WARNING
         logging.basicConfig(level=level)
 
-        self.my_args = []
         self.fixes = [self.choose_char(All_Characters)]
-        new_argv = [args.prog] + [create_arg(self.last_fix())]
+        new_argv = [args.prog] + [self.last_fix()]
         if args.module:
             self.run_python_module(args.prog, new_argv)
         else:

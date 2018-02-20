@@ -42,6 +42,10 @@ class tstr(str):
         return result_list
 
 
+    def find(self, sub, start=None, end=None):
+        return str(self).find(sub, start, end)
+
+
     def get_mapped_char_idx(self, i):
         # if the current string is not mapped to input till
         # char 10 (_unmapped_till), but the
@@ -55,7 +59,7 @@ class tstr(str):
     # returns the index of the character this substring maps to
     # e.g. "start" is the original string, "art" is the current string, then "art".get_first_mapped_char() returns 2
     def get_first_mapped_char(self):
-        return abs(self.get_mapped_char_idx(0))
+        return self._idx
 
     def __add__(self, other):  #concatenation (+)
         t =  tstr(str.__add__(self, other), idx=self._idx, unmapped_till=self._unmapped_till)
@@ -195,5 +199,5 @@ def make_str_wrapper(fun):
 for name, fn in inspect.getmembers(str, callable):
     if name not in ['__class__', '__new__', '__str__', '__init__', '__repr__',
             '__getattribute__', '__getitem__', '__rmod__', '__mod__', '__add__',
-            '__radd__', 'strip', 'lstrip', 'rstrip', '__iter__', 'expandtabs', '__format__', 'split']:
+            '__radd__', 'strip', 'lstrip', 'rstrip', '__iter__', 'expandtabs', '__format__', 'split', 'find']:
         setattr(tstr, name, make_str_wrapper(fn))

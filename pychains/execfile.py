@@ -94,48 +94,99 @@ def save_trace(traces, i, file='trace'):
     with open('.t/%s-%d.txt' % (file,i), 'w+') as f:
         for i in traces: print(i, file=f)
 
-class ExecFile(bex.ExecFile):
+class Prefix:
+    def __init__(self, myarg, fixes):
+        self.my_arg = myarg
+        self.fixes = fixes
 
-    def add_sys_args(self, var):
-        if type(var) is not tstr: var = create_arg(var)
-        self._my_args.append(var)
+    def matching(self, elt, lst):
+        largest, lelt = '', None
+        for e in lst:
+            common = os.path.commonprefix([elt, e])
+            if len(common) > len(largest):
+                largest, lelt = common, e
+        return largest, lelt
 
-    def sys_args(self):
-        return self._my_args[-1]
+    def parsing_state(self, h, arg_prefix):
+        last_char_added = arg_prefix[-1]
+        o = Op(h.opnum)
 
-    # Load the pickled state and also set the random set.
-    # Used to start execution at arbitrary iterations.
-    # requires prior dump
-    def load(self, i):
-        with open(Pickled % i, 'rb') as f:
-            self.__dict__ = pickle.load(f)
-            random.setstate(self.rstate)
+        if type(h.opA) is tstr:
+            if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1:
+                # Dont add IN and NOT_IN -- '0' in '0123456789' is a common
+                # technique in char comparision to check for digits
+                # A string comparison rather than a character comparison.
+                return (1, EState.String, h)
 
-    # Save the execution states at each iteration.
-    def dump(self):
-        with open(Pickled % self.start_i, 'wb') as f:
-            self.rstate = random.getstate()
-            pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
+            elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
+                # A string comparison rather than a character comparison.
+                return (1, EState.String, h)
 
-    def choose_char(self, lst):
-        if Distribution=='C':
-            # A cumulative distribution where characters that have not
-            # appeared until now are given equally higher weight.
-            myarr = {i:1 for i in All_Characters}
-            for i in self.sys_args(): myarr[i] += 1
-            my_weights = [1/myarr[l] for l in lst]
-            return random.choices(lst, weights=my_weights, k=1)[0]
-        elif Distribution=='X':
-            # A cumulative distribution where characters that have not
-            # appeared in last 100 are given higher weight.
-            myarr = {i:1 for i in All_Characters}
-            for i in set(self.sys_args()[-100:]):
-                myarr[i] += 10
-            my_weights = [1/myarr[l] for l in lst]
-            return random.choices(lst, weights=my_weights, k=1)[0]
+            if h.opA.x() == last_char_added.x():
+                # A character comparison of the *last* char.
+                return (1, EState.Char, h)
 
+            elif h.opA.x() == len(arg_prefix):
+                # An empty comparison at the EOF
+                return (1, EState.EOF, h)
+
+            elif len(h.opA) == 1 and h.opA.x() != last_char_added.x():
+                # An early validation, where the comparison goes back to
+                # one of the early chars. Imagine when we use regex /[.0-9+-]/
+                # for int, and finally validate it with int(mystr)
+                return (1, EState.Trim, h)
+
+            else:
+                return (-1, EState.Unknown, (h, last_char_added))
+
+        # Everything from this point on is a HACK because the dynamic tainting
+        # failed.
+        elif h.opA == last_char_added and isinstance(h.opB, str) and len(h.opB) == 1:
+            # A character comparison of the *last* char.
+            return (2, EState.Char, h)
+
+        elif h.opA == last_char_added and isinstance(h.opB, str) and len(h.opB) != 1:
+            # A character comparison of the *last* char.
+            return (2, EState.String, h)
+
+        elif h.opA == last_char_added:
+            # A character comparison of the *last* char.
+            return (3, EState.Char, h)
+
+        elif o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and h.opA == '':
+            # What fails here: Imagine
+            # def peek(self):
+            #    if self.pos == self.len: return ''
+            # HACK
+            return (2, EState.EOF, h)
+
+        elif o in [Op.IN, Op.NOT_IN] and isinstance(h.opB, (list, set)) and h.opA == '':
+            # What fails here: Imagine
+            # def peek(self):
+            #    if self.pos == self.len: return ''
+            # HACK
+            return (2, EState.EOF, h)
+
+        # elif o in CmpSet and isinstance(h.opB, str) and len(h.opB) > 1:
+        # # Disabling this unless we have no other choice because too many
+        # string version comparisons in source loading.
+        #     # what fails here: Imagine
+        #     #    ESC_MAP = {'true': 'True', 'false': 'false'}
+        #     #    t.opA = ESC_MAP[s]
+        #     # HACK
+        #     brk()
+        #     return (1, EState.String, h)
+
+        # elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
+        #     # A string comparison rather than a character comparison.
+        #     brk()
+        #     return (1, EState.String, h)
+
+        # elif len(h.opA) == 1 and h.opA != last_char_added:
+        # We cannot do this unless we have tainting. Use Unknown instead
+        #    return (1, EState.Trim, h)
         else:
-            return random.choice(lst)
+            return (0, EState.Unknown, (h, last_char_added))
 
     def comparisons_on_last_char(self, h, cmp_traces):
         """
@@ -227,101 +278,9 @@ class ExecFile(bex.ExecFile):
                 solutions.append(lst)
         return solutions
 
-    def parsing_state(self, h, arg_prefix):
-        last_char_added = arg_prefix[-1]
-        o = Op(h.opnum)
-
-        if type(h.opA) is tstr:
-            if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1:
-                # Dont add IN and NOT_IN -- '0' in '0123456789' is a common
-                # technique in char comparision to check for digits
-                # A string comparison rather than a character comparison.
-                return (1, EState.String, h)
-
-            elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
-                # A string comparison rather than a character comparison.
-                return (1, EState.String, h)
-
-            if h.opA.x() == last_char_added.x():
-                # A character comparison of the *last* char.
-                return (1, EState.Char, h)
-
-            elif h.opA.x() == len(arg_prefix):
-                # An empty comparison at the EOF
-                return (1, EState.EOF, h)
-
-            elif len(h.opA) == 1 and h.opA.x() != last_char_added.x():
-                # An early validation, where the comparison goes back to
-                # one of the early chars. Imagine when we use regex /[.0-9+-]/
-                # for int, and finally validate it with int(mystr)
-                return (1, EState.Trim, h)
-
-            else:
-                return (-1, EState.Unknown, (h, last_char_added))
-
-        # Everything from this point on is a HACK because the dynamic tainting
-        # failed.
-        elif h.opA == last_char_added and isinstance(h.opB, str) and len(h.opB) == 1:
-            # A character comparison of the *last* char.
-            return (2, EState.Char, h)
-
-        elif h.opA == last_char_added and isinstance(h.opB, str) and len(h.opB) != 1:
-            # A character comparison of the *last* char.
-            return (2, EState.String, h)
-
-        elif h.opA == last_char_added:
-            # A character comparison of the *last* char.
-            return (3, EState.Char, h)
-
-        elif o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and h.opA == '':
-            # What fails here: Imagine
-            # def peek(self):
-            #    if self.pos == self.len: return ''
-            # HACK
-            return (2, EState.EOF, h)
-
-        elif o in [Op.IN, Op.NOT_IN] and isinstance(h.opB, (list, set)) and h.opA == '':
-            # What fails here: Imagine
-            # def peek(self):
-            #    if self.pos == self.len: return ''
-            # HACK
-            return (2, EState.EOF, h)
-
-
-
-        # elif o in CmpSet and isinstance(h.opB, str) and len(h.opB) > 1:
-        # # Disabling this unless we have no other choice because too many
-        # string version comparisons in source loading.
-        #     # what fails here: Imagine
-        #     #    ESC_MAP = {'true': 'True', 'false': 'false'}
-        #     #    t.opA = ESC_MAP[s]
-        #     # HACK
-        #     brk()
-        #     return (1, EState.String, h)
-
-        # elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
-        #     # A string comparison rather than a character comparison.
-        #     brk()
-        #     return (1, EState.String, h)
-
-        # elif len(h.opA) == 1 and h.opA != last_char_added:
-        # We cannot do this unless we have tainting. Use Unknown instead
-        #    return (1, EState.Trim, h)
-        else:
-            return (0, EState.Unknown, (h, last_char_added))
-
-    def matching(self, elt, lst):
-        largest, lelt = '', None
-        for e in lst:
-            common = os.path.commonprefix([elt, e])
-            if len(common) > len(largest):
-                largest, lelt = common, e
-        return largest, lelt
-
-    def last_char_added(self):
-        return self.sys_args()[-1]
-
-    def on_trace(self, i, traces, steps, arg_prefix, fixes):
+    def solve(self, traces, i):
+        arg_prefix = self.my_arg
+        fixes = self.fixes
         last_char_added = arg_prefix[-1]
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
@@ -331,7 +290,6 @@ class ExecFile(bex.ExecFile):
 
             idx, k, info = self.parsing_state(h, arg_prefix)
             log((RandomSeed, i, idx, k, info, "is tstr", isinstance(h.opA, tstr)), 0)
-
 
             if k == EState.Char:
                 # A character comparison of the *last* char.
@@ -349,15 +307,20 @@ class ExecFile(bex.ExecFile):
                     fixes = []
 
                 # check for line cov here.
-                new_char = self.choose_char(random.choice(corr))
-                arg = "%s%s" % (arg_prefix[:-1], new_char)
+                prefix = arg_prefix[:-1]
+                sols = []
+                chars = {new_char for v in corr for new_char in v}
+                for new_char in chars:
+                    arg = "%s%s" % (prefix, new_char)
+                    sols.append(Prefix(arg, fixes))
 
-                return (fixes, arg)
+                return sols
             elif k == EState.Trim:
                 # we need to (1) find where h.opA._idx is within
                 # sys_args, and trim sys_args to that location
                 args = arg_prefix[h.opA.x():]
-                return ([], args) # VERIFY - TODO
+                sols = [Prefix(args, [])]
+                return sols # VERIFY - TODO
 
             elif k == EState.String:
                 if o in [Op.IN, Op.NOT_IN]:
@@ -369,13 +332,16 @@ class ExecFile(bex.ExecFile):
                 common = os.path.commonprefix([h.opA, opB])
                 assert h.opB[len(common)-1] == last_char_added
                 arg = "%s%s" % (arg_prefix, h.opB[len(common):])
-                return ([], arg)
+                sols = [Prefix(arg, [])]
+                return sols
             elif k == EState.EOF:
                 # An empty comparison at the EOF
-                new_char = self.choose_char(All_Characters)
-                arg = "%s%s" % (arg_prefix, new_char)
+                sols = []
+                for new_char in All_Characters:
+                    arg = "%s%s" % (arg_prefix, new_char)
+                    sols.append(Prefix(arg, []))
 
-                return ([], arg)
+                return sols
             elif k == EState.Unknown:
                 # Unknown what exactly happened. Strip the last and try again
                 # try again.
@@ -384,12 +350,58 @@ class ExecFile(bex.ExecFile):
             else:
                 assert False
 
-        return None
+        return []
+
+class ExecFile(bex.ExecFile):
+
+    def add_sys_args(self, var):
+        if type(var) is not tstr: var = create_arg(var)
+        self._my_args.append(var)
+
+    def sys_args(self):
+        return self._my_args[-1]
+
+    # Load the pickled state and also set the random set.
+    # Used to start execution at arbitrary iterations.
+    # requires prior dump
+    def load(self, i):
+        with open(Pickled % i, 'rb') as f:
+            self.__dict__ = pickle.load(f)
+            random.setstate(self.rstate)
+
+    # Save the execution states at each iteration.
+    def dump(self):
+        with open(Pickled % self.start_i, 'wb') as f:
+            self.rstate = random.getstate()
+            pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
 
     def add_new_char(self, fix):
         self.add_sys_args(fix)
         if len(sys.argv) < 2: sys.argv.append([])
         sys.argv[1] = self.sys_args()
+
+    def last_char_added(self):
+        return self.sys_args()[-1]
+
+    def choose_char(self, lst):
+        if Distribution=='C':
+            # A cumulative distribution where characters that have not
+            # appeared until now are given equally higher weight.
+            myarr = {i:1 for i in All_Characters}
+            for i in self.sys_args(): myarr[i] += 1
+            my_weights = [1/myarr[l] for l in lst]
+            return random.choices(lst, weights=my_weights, k=1)[0]
+        elif Distribution=='X':
+            # A cumulative distribution where characters that have not
+            # appeared in last 100 are given higher weight.
+            myarr = {i:1 for i in All_Characters}
+            for i in set(self.sys_args()[-100:]):
+                myarr[i] += 10
+            my_weights = [1/myarr[l] for l in lst]
+            return random.choices(lst, weights=my_weights, k=1)[0]
+
+        else:
+            return random.choice(lst)
 
     def exec_code_object(self, code, env):
         self.start_i = 0
@@ -427,17 +439,24 @@ class ExecFile(bex.ExecFile):
                 # position already.
                 fixes = self.fixes()
 
-                fixes, t = self.on_trace(i, traces, vm.steps, my_arg, fixes)
-                if not t:
+                prefix = Prefix(my_arg, fixes)
+                solutions = prefix.solve(traces, i)
+
+                if not solutions:
                     # remove one character and try again.
                     self.add_sys_args(self.sys_args()[:-1])
-                else:
-                    self.add_sys_args(t)
-                if not self.sys_args():
-                    # we failed utterly
-                    raise Exception('No suitable continuation found')
+                    sys.argv[1] = self.sys_args()
+                    self._fixes = fixes
+                    if not self.sys_args():
+                        # we failed utterly
+                        raise Exception('No suitable continuation found')
+                    return
+
+                # use this prefix
+                prefix = random.choice(solutions)
+                self.add_sys_args(prefix.my_arg)
                 sys.argv[1] = self.sys_args()
-                self._fixes = fixes
+                self._fixes = prefix.fixes
 
     def fixes(self):
         return self._fixes + [self.last_char_added()]

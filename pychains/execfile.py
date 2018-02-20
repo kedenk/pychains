@@ -199,11 +199,11 @@ class ExecFile(bex.ExecFile):
             diverge, *satisfy = cmp_stack[v:]
             lst_solutions = All_Characters
             for i,elt in reversed(satisfy):
-                assert elt.opA == self.last_fix()
+                assert elt.opA == self.last_char_added()
                 lst_solutions = self.extract_solutions(elt, lst_solutions, False)
             # now we need to diverge here
             i, elt = diverge
-            assert elt.opA == self.last_fix()
+            assert elt.opA == self.last_char_added()
             lst_solutions = self.extract_solutions(elt, lst_solutions, True)
             if lst_solutions:
                 return lst_solutions
@@ -256,7 +256,7 @@ class ExecFile(bex.ExecFile):
                 return (1, EState.Trim, h)
 
             else:
-                return (-1, EState.Unknown, (h, self.last_fix()))
+                return (-1, EState.Unknown, (h, self.last_char_added()))
 
         # Everything from this point on is a HACK because the dynamic tainting
         # failed.
@@ -307,7 +307,7 @@ class ExecFile(bex.ExecFile):
         # We cannot do this unless we have tainting. Use Unknown instead
         #    return (1, EState.Trim, h)
         else:
-            return (0, EState.Unknown, (h, self.last_fix()))
+            return (0, EState.Unknown, (h, self.last_char_added()))
 
     def matching(self, elt, lst):
         largest, lelt = '', None
@@ -317,8 +317,8 @@ class ExecFile(bex.ExecFile):
                 largest, lelt = common, e
         return largest, lelt
 
-    def last_fix(self):
-        return self.fixes[-1]
+    def last_char_added(self):
+        return self.sys_args()[-1]
 
     def on_trace(self, i, traces, steps):
         a = self.sys_args()
@@ -333,7 +333,7 @@ class ExecFile(bex.ExecFile):
 
             # fixes are characters that have been tried at that particular
             # position already.
-            fixes = self.fixes
+            fixes = self.fixes()
 
             if k == EState.Char:
                 # A character comparison of the *last* char.
@@ -342,7 +342,8 @@ class ExecFile(bex.ExecFile):
                 # first comparison that was made otherwise.
                 cmp_stack = self.comparisons_on_last_char(h, traces)
                 # Now, try to fix the last failure
-                if h.opA == self.last_fix() and o in CmpSet:
+                assert self.has_new_char
+                if h.opA == self.last_char_added() and o in CmpSet:
                     # Now, try to fix the last failure
                     corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
                     if not corr: raise Exception('Exhausted attempts: %s' % fixes)
@@ -353,7 +354,7 @@ class ExecFile(bex.ExecFile):
                 new_char = self.choose_char(random.choice(corr))
                 arg = "%s%s" % (self.sys_args()[:-1], new_char)
 
-                return (fixes + [new_char], arg)
+                return (fixes, arg)
             elif k == EState.Trim:
                 # we need to (1) find where h.opA._idx is within
                 # self.sys_args, and trim self.sys_args to that location
@@ -368,21 +369,16 @@ class ExecFile(bex.ExecFile):
                 else:
                     assert False
                 common = os.path.commonprefix([h.opA, opB])
-                if fixes:
-                    # if fix is present, it means we passed through
-                    # EState.EOF
-                    assert h.opB[len(common)-1] == self.last_fix()
-                    arg = "%s%s" % (self.sys_args(), h.opB[len(common):])
-                    return ([], arg)
-                else:
-                    # we dont know what we are doing.
-                    continue
+                assert self.has_new_char
+                assert h.opB[len(common)-1] == self.last_char_added()
+                arg = "%s%s" % (self.sys_args(), h.opB[len(common):])
+                return ([], arg)
             elif k == EState.EOF:
                 # An empty comparison at the EOF
                 new_char = self.choose_char(All_Characters)
                 arg = "%s%s" % (self.sys_args(), new_char)
 
-                return ([new_char], arg)
+                return ([], arg)
             elif k == EState.Unknown:
                 # Unknown what exactly happened. Strip the last and try again
                 # try again.
@@ -392,6 +388,14 @@ class ExecFile(bex.ExecFile):
                 assert False
 
         return None
+
+    def add_new_char(self, fix):
+        self.add_sys_args(fix)
+        if len(sys.argv) < 2:
+            sys.argv.append(self.sys_args())
+        else:
+            sys.argv[1] = self.sys_args()
+        self.has_new_char = True
 
     def exec_code_object(self, code, env):
         self.start_i = 0
@@ -403,11 +407,7 @@ class ExecFile(bex.ExecFile):
         env['float'] = my_float
 
         fix = self.choose_char(All_Characters)
-        self.add_sys_args(fix)
-        # The last_character assignment made is the first character assigned
-        # when starting.
-        self.fixes = [fix]
-        sys.argv.append(fix)
+        self.add_new_char(fix)
 
         for i in range(self.start_i, MaxIter):
             self.start_i = i
@@ -418,8 +418,8 @@ class ExecFile(bex.ExecFile):
                 v = vm.run_code(code, f_globals=env)
                 print('Arg: %s' % repr(self.sys_args()))
                 if random.uniform(0,1) > Return_Probability:
-                    self.fixes = [self.choose_char(All_Characters)]
-                    self.add_sys_args("%s%s" % (sys.argv[1], self.last_fix()))
+                    self._fixes = []
+                    self.add_sys_args("%s%s" % (sys.argv[1], self.last_char_added()))
                     sys.argv[1] = self.sys_args()
                 else:
                     return v
@@ -440,11 +440,15 @@ class ExecFile(bex.ExecFile):
                     # we failed utterly
                     raise Exception('No suitable continuation found')
                 sys.argv[1] = self.sys_args()
-                self.fixes = fixes
+                self._fixes = fixes
+
+    def fixes(self):
+        return self._fixes + [self.sys_args()[-1]]
 
     def reinit(self):
         self.initiate_bfs = False
         self._my_args = []
+        self._fixes = []
 
     def cmdline(self, argv):
         parser = argparse.ArgumentParser(

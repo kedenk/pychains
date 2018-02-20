@@ -386,7 +386,7 @@ class ExecFile(bex.ExecFile):
         env['int'] = my_int
         env['float'] = my_float
 
-        # return exec_code_object_bfs(code, env, "")
+        return exec_code_object_bfs(code, env, tstr("", 0), Track)
 
         for i in range(self.start_i, MaxIter):
             self.start_i = i
@@ -404,7 +404,7 @@ class ExecFile(bex.ExecFile):
                     return v
             except Exception as e:
                 if i == MaxIter -1 and InitiateBFS:
-                    return exec_code_object_bfs(code, env, self.sys_args())
+                    return exec_code_object_bfs(code, env, self.sys_args(), Track)
                 traces = list(reversed(vm.get_trace()))
                 save_trace(traces, i)
                 save_trace(vm.byte_trace, i, file='byte')

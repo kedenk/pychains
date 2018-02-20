@@ -260,16 +260,33 @@ class ExecFile(bex.ExecFile):
 
         # Everything from this point on is a HACK because the dynamic tainting
         # failed.
-        elif h.opA == self.sys_args()[-1]:
+        elif h.opA == self.sys_args()[-1] and isinstance(h.opB, str) and len(h.opB) == 1:
             # A character comparison of the *last* char.
             return (2, EState.Char, h)
 
-        elif o in CmpSet and isinstance(h.opB, str) and h.opA == '':
+        elif h.opA == self.sys_args()[-1] and isinstance(h.opB, str) and len(h.opB) != 1:
+            # A character comparison of the *last* char.
+            return (2, EState.String, h)
+
+        elif h.opA == self.sys_args()[-1]:
+            # A character comparison of the *last* char.
+            return (3, EState.Char, h)
+
+        elif o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and h.opA == '':
             # What fails here: Imagine
             # def peek(self):
             #    if self.pos == self.len: return ''
             # HACK
             return (2, EState.EOF, h)
+
+        elif o in [Op.IN, Op.NOT_IN] and isinstance(h.opB, (list, set)) and h.opA == '':
+            # What fails here: Imagine
+            # def peek(self):
+            #    if self.pos == self.len: return ''
+            # HACK
+            return (2, EState.EOF, h)
+
+
 
         # elif o in CmpSet and isinstance(h.opB, str) and len(h.opB) > 1:
         # # Disabling this unless we have no other choice because too many

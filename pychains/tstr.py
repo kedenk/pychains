@@ -28,6 +28,20 @@ class tstr(str):
             raise Exception('Invalid mapped char idx in tstr')
         return v
 
+    def split(self, sep = None, maxsplit: int = -1):
+        splitted = str(self).split(sep, maxsplit)
+        if sep == None:
+            sep = " "
+        result_list = list()
+        index_counter = 0
+        for s in splitted:
+            idx = self._idx + abs(min(0, self._unmapped_till - index_counter))
+            unmapped = max(0, self._unmapped_till - index_counter)
+            result_list.append(tstr(s, idx, unmapped))
+            index_counter += len(s) + len(sep)
+        return result_list
+
+
     def get_mapped_char_idx(self, i):
         # if the current string is not mapped to input till
         # char 10 (_unmapped_till), but the
@@ -37,6 +51,11 @@ class tstr(str):
         # and requesting 11 should return 6
         #   which is 5 - 10 + 11
         return self._idx - self._unmapped_till + i
+
+    # returns the index of the character this substring maps to
+    # e.g. "start" is the original string, "art" is the current string, then "art".get_first_mapped_char() returns 2
+    def get_first_mapped_char(self):
+        return abs(self.get_mapped_char_idx(0))
 
     def __add__(self, other):  #concatenation (+)
         t =  tstr(str.__add__(self, other), idx=self._idx, unmapped_till=self._unmapped_till)
@@ -164,9 +183,9 @@ def make_str_wrapper(fun):
             elif fun.__name__ == 'join':
                 pudb.set_trace()
                 return tstr(res, idx=0)
-            elif fun.__name__ == 'split':
-                pudb.set_trace()
-                return tstr(res, idx=0)
+            # elif fun.__name__ == 'split':
+            #     pudb.set_trace()
+            #     return tstr(res, idx=0)
             else:
                 pudb.set_trace()
                 raise Exception('%s Not implemented in TSTR' % fun.__name__)
@@ -176,5 +195,5 @@ def make_str_wrapper(fun):
 for name, fn in inspect.getmembers(str, callable):
     if name not in ['__class__', '__new__', '__str__', '__init__', '__repr__',
             '__getattribute__', '__getitem__', '__rmod__', '__mod__', '__add__',
-            '__radd__', 'strip', 'lstrip', 'rstrip', '__iter__', 'expandtabs', '__format__']:
+            '__radd__', 'strip', 'lstrip', 'rstrip', '__iter__', 'expandtabs', '__format__', 'split']:
         setattr(tstr, name, make_str_wrapper(fn))

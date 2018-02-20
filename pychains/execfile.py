@@ -95,8 +95,11 @@ def save_trace(traces, i, file='trace'):
         for i in traces: print(i, file=f)
 
 class Prefix:
-    def __init__(self, myarg, fixes):
-        self.my_arg = myarg
+    def __init__(self, myarg, fixes=[]):
+        if type(myarg) is not tstr:
+            self.my_arg = create_arg(myarg)
+        else:
+            self.my_arg = myarg
         self.fixes = fixes
 
     def matching(self, elt, lst):
@@ -319,7 +322,7 @@ class Prefix:
                 # we need to (1) find where h.opA._idx is within
                 # sys_args, and trim sys_args to that location
                 args = arg_prefix[h.opA.x():]
-                sols = [Prefix(args, [])]
+                sols = [Prefix(args)]
                 return sols # VERIFY - TODO
 
             elif k == EState.String:
@@ -332,14 +335,14 @@ class Prefix:
                 common = os.path.commonprefix([h.opA, opB])
                 assert h.opB[len(common)-1] == last_char_added
                 arg = "%s%s" % (arg_prefix, h.opB[len(common):])
-                sols = [Prefix(arg, [])]
+                sols = [Prefix(arg)]
                 return sols
             elif k == EState.EOF:
                 # An empty comparison at the EOF
                 sols = []
                 for new_char in All_Characters:
                     arg = "%s%s" % (arg_prefix, new_char)
-                    sols.append(Prefix(arg, []))
+                    sols.append(Prefix(arg))
 
                 return sols
             elif k == EState.Unknown:
@@ -375,33 +378,15 @@ class ExecFile(bex.ExecFile):
             self.rstate = random.getstate()
             pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
 
-    def add_new_char(self, fix):
-        self.add_sys_args(fix)
+    def choose_prefix(self, solutions):
+        prefix = random.choice(solutions)
+        return prefix
+
+    def apply_prefix(self, prefix):
+        self.current_prefix = prefix
+        self.add_sys_args(prefix.my_arg)
         if len(sys.argv) < 2: sys.argv.append([])
         sys.argv[1] = self.sys_args()
-
-    def last_char_added(self):
-        return self.sys_args()[-1]
-
-    def choose_char(self, lst):
-        if Distribution=='C':
-            # A cumulative distribution where characters that have not
-            # appeared until now are given equally higher weight.
-            myarr = {i:1 for i in All_Characters}
-            for i in self.sys_args(): myarr[i] += 1
-            my_weights = [1/myarr[l] for l in lst]
-            return random.choices(lst, weights=my_weights, k=1)[0]
-        elif Distribution=='X':
-            # A cumulative distribution where characters that have not
-            # appeared in last 100 are given higher weight.
-            myarr = {i:1 for i in All_Characters}
-            for i in set(self.sys_args()[-100:]):
-                myarr[i] += 10
-            my_weights = [1/myarr[l] for l in lst]
-            return random.choices(lst, weights=my_weights, k=1)[0]
-
-        else:
-            return random.choice(lst)
 
     def exec_code_object(self, code, env):
         self.start_i = 0
@@ -412,8 +397,8 @@ class ExecFile(bex.ExecFile):
         env['int'] = my_int
         env['float'] = my_float
 
-        fix = self.choose_char(All_Characters)
-        self.add_new_char(fix)
+        p = Prefix(random.choice(All_Characters))
+        self.apply_prefix(p)
 
         for i in range(self.start_i, MaxIter):
             self.start_i = i
@@ -424,9 +409,7 @@ class ExecFile(bex.ExecFile):
                 v = vm.run_code(code, f_globals=env)
                 print('Arg: %s' % repr(self.sys_args()))
                 if random.uniform(0,1) > Return_Probability:
-                    self._fixes = []
-                    self.add_sys_args("%s%s" % (sys.argv[1], self.last_char_added()))
-                    sys.argv[1] = self.sys_args()
+                    continue
                 else:
                     return v
             except Exception as e:
@@ -434,37 +417,27 @@ class ExecFile(bex.ExecFile):
                     self.initiate_bfs = True
                     return exec_code_object_bfs(code, env, self.sys_args())
                 traces = list(reversed(vm.get_trace()))
-                my_arg = self.sys_args()
                 # fixes are characters that have been tried at that particular
                 # position already.
-                fixes = self.fixes()
-
-                prefix = Prefix(my_arg, fixes)
-                solutions = prefix.solve(traces, i)
+                solutions = self.current_prefix.solve(traces, i)
 
                 if not solutions:
                     # remove one character and try again.
-                    self.add_sys_args(self.sys_args()[:-1])
-                    sys.argv[1] = self.sys_args()
-                    self._fixes = fixes
-                    if not self.sys_args():
+                    new_arg = self.sys_args()[:-1]
+                    if not new_arg:
                         # we failed utterly
                         raise Exception('No suitable continuation found')
+                    p = Prefix(new_arg)
+                    self.apply_prefix(p)
                     return
 
                 # use this prefix
-                prefix = random.choice(solutions)
-                self.add_sys_args(prefix.my_arg)
-                sys.argv[1] = self.sys_args()
-                self._fixes = prefix.fixes
-
-    def fixes(self):
-        return self._fixes + [self.last_char_added()]
+                prefix = self.choose_prefix(solutions)
+                self.apply_prefix(prefix)
 
     def reinit(self):
         self.initiate_bfs = False
         self._my_args = []
-        self._fixes = []
 
     def cmdline(self, argv):
         parser = argparse.ArgumentParser(

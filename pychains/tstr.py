@@ -28,22 +28,26 @@ class tstr(str):
             raise Exception('Invalid mapped char idx in tstr')
         return v
 
-    def split(self, sep = None, maxsplit: int = -1):
-        splitted = str(self).split(sep, maxsplit)
-        if sep == None:
-            sep = " "
-        result_list = list()
+    def split(self, sep = None, maxsplit = -1):
+        splitted = super().split(sep, maxsplit)
+        result_list = []
         index_counter = 0
-        for s in splitted:
+        sep_len = len(sep) if sep else 0
+        for i,s in enumerate(splitted):
             idx = self._idx + abs(min(0, self._unmapped_till - index_counter))
             unmapped = max(0, self._unmapped_till - index_counter)
             result_list.append(tstr(s, idx, unmapped))
-            index_counter += len(s) + len(sep)
+            if not sep and len(splitted) > i+1:
+                nxt = splitted[i+1]
+                fr = index_counter + len(s)
+                rest= super().__getitem__(slice(fr, None, None))
+                sep_len = rest.find(nxt)
+            index_counter += len(s) + sep_len
         return result_list
 
 
     def find(self, sub, start=None, end=None):
-        return str(self).find(sub, start, end)
+        return super().find(sub, start, end)
 
 
     def get_mapped_char_idx(self, i):
@@ -70,7 +74,7 @@ class tstr(str):
         return t
 
     def __repr__(self):
-        return str.__repr__(self)
+        return str.__repr__(self) + ':' + str((self._idx, self._unmapped_till))
 
     def __str__(self):
         return str.__str__(self)
@@ -130,6 +134,9 @@ class tstr(str):
         unmapped_till = res.find(self)
         return tstr(res, idx=self._idx, unmapped_till=unmapped_till)
 
+    def __eq__(self, other):
+        super().__eq__(other)
+
 
 def make_str_wrapper(fun):
     def proxy(*args, **kwargs):
@@ -187,9 +194,6 @@ def make_str_wrapper(fun):
             elif fun.__name__ == 'join':
                 pudb.set_trace()
                 return tstr(res, idx=0)
-            # elif fun.__name__ == 'split':
-            #     pudb.set_trace()
-            #     return tstr(res, idx=0)
             else:
                 pudb.set_trace()
                 raise Exception('%s Not implemented in TSTR' % fun.__name__)

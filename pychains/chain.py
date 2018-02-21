@@ -326,9 +326,11 @@ class ExecFile:
         # replace interesting things
         # env['type'] = my_type
         p = Prefix(random.choice(All_Characters))
-        self.apply_prefix(p)
+        solution_stack = [p]
 
         for i in range(self.start_i, MaxIter):
+            p, *solution_stack = solution_stack
+            self.apply_prefix(p)
             self.start_i = i
             if Dump: self.dump()
             tainted.Comparisons = []
@@ -341,26 +343,31 @@ class ExecFile:
                 else:
                     return v
             except Exception as e:
-                if i == MaxIter -1 and InitiateBFS:
+                if i == MaxIter//100 and InitiateBFS:
+                    print('with BFS', flush=True)
                     self.initiate_bfs = True
                 traces = tainted.Comparisons
                 # fixes are characters that have been tried at that particular
                 # position already.
                 solutions = self.current_prefix.solve(traces, i)
 
-                if not solutions:
+                if not solutions and not self.initiate_bfs:
                     # remove one character and try again.
                     new_arg = self.sys_args()[:-1]
                     if not new_arg:
                         # we failed utterly
                         raise Exception('No suitable continuation found')
                     p = Prefix(new_arg)
-                    self.apply_prefix(p)
-                    return
+                    solutions = [p]
 
-                # use this prefix
-                prefix = self.choose_prefix(solutions)
-                self.apply_prefix(prefix)
+                if self.initiate_bfs:
+                    log('BFS')
+                    # Naive BFS
+                    # To get solutions from bjoern
+                    solution_stack.extend(solutions)
+                else:
+                    prefix = random.choice(solutions)
+                    solution_stack = [prefix]
 
 if __name__ == '__main__':
     import imp

@@ -1,20 +1,18 @@
-import mj
-
 import pickle
 import os.path
 import string
 import enum
 import sys
 
-import tstr
-from tstr import Op
+import tainted
+from tainted import Op
 
 RandomSeed = int(os.getenv('R') or '0')
 import random
 random.seed(RandomSeed)
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = 1000
+MaxIter = 10000
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
@@ -57,7 +55,7 @@ def brk(v=True):
 
 def create_arg(s):
     if Track:
-        return tstr.tstr(s, idx=0)
+        return tainted.tstr(s, idx=0)
     else:
         return s
 
@@ -85,7 +83,7 @@ def save_trace(traces, i, file='trace'):
 
 class Prefix:
     def __init__(self, myarg, fixes=[]):
-        if type(myarg) is not tstr.tstr:
+        if type(myarg) is not tainted.tstr:
             self.my_arg = create_arg(myarg)
         else:
             self.my_arg = myarg
@@ -156,7 +154,7 @@ class Prefix:
         return cmp_stack
 
     def extract_solutions(self, elt, lst_solutions, flip=False):
-        fn = tstr.COMPARE_OPERATORS[elt.op]
+        fn = tainted.COMPARE_OPERATORS[elt.op]
         result = fn(str(elt.opA), str(elt.opB))
         if isinstance(elt.opB, str) and len(elt.opB) == 0:
             if Op(elt.op) in [Op.EQ, Op.NE]:
@@ -220,7 +218,7 @@ class Prefix:
             o = h.op
 
             idx, k, info = self.parsing_state(h, arg_prefix)
-            log((RandomSeed, i, idx, k, info, "is tstr", isinstance(h.opA, tstr.tstr)), 1)
+            log((RandomSeed, i, idx, k, info, "is tainted", isinstance(h.opA, tainted.tstr)), 1)
 
             if k == EState.Char:
                 # A character comparison of the *last* char.
@@ -293,7 +291,7 @@ class ExecFile:
         self._my_args = []
 
     def add_sys_args(self, var):
-        if type(var) is not tstr.tstr: var = create_arg(var)
+        if type(var) is not tainted.tstr: var = create_arg(var)
         self._my_args.append(var)
 
     def sys_args(self):
@@ -333,7 +331,7 @@ class ExecFile:
         for i in range(self.start_i, MaxIter):
             self.start_i = i
             if Dump: self.dump()
-            tstr.Comparisons = []
+            tainted.Comparisons = []
             try:
                 log(">> %s" % self.sys_args(), 1)
                 v = fn(self.sys_args())
@@ -345,7 +343,7 @@ class ExecFile:
             except Exception as e:
                 if i == MaxIter -1 and InitiateBFS:
                     self.initiate_bfs = True
-                traces = tstr.Comparisons
+                traces = tainted.Comparisons
                 # fixes are characters that have been tried at that particular
                 # position already.
                 solutions = self.current_prefix.solve(traces, i)
@@ -365,10 +363,8 @@ class ExecFile:
                 self.apply_prefix(prefix)
 
 if __name__ == '__main__':
-    e = ExecFile()
+    import imp
     arg = sys.argv[1]
-    #_mod = __import__(arg, globals(), locals(), ['main'], 0) 
-    #e.exec_argument(_mod.main)
-    #my_vars = {}
-    #exec(open(arg).read(), my_vars)
-    e.exec_argument(mj.main)
+    _mod = imp.load_source('mymod', arg)
+    e = ExecFile()
+    e.exec_argument(_mod.main)

@@ -7,7 +7,7 @@
 
 # std
 import math
-import io
+import myio as io
 import types
 
 
@@ -86,7 +86,7 @@ class JSONStream(object):
 
     def peek(self):
         if self.pos == self.len:
-            return ''
+            return self.getvalue()[self.pos:]
         return self.getvalue()[self.pos]
 
     def substr(self, pos, length):
@@ -377,12 +377,7 @@ def to_json(obj):
 decode = from_json
 encode = to_json
 
-def main(str):
-    print(from_json(str))
-
-if __name__ == '__main__':
-    import sys
-    result = from_json(sys.argv[1])
+def main(s):
+    result = from_json(s)
     print(repr(result))
-    #with open(sys.argv[1]) as f:
-    #    main(f.read())
+

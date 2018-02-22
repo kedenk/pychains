@@ -66,12 +66,11 @@ def cgi_decode(s):
     return t
 
 def main(arg):
-    return cgi_decode(arg)
+    r = cgi_decode(arg)
+    print('Result: %s ' % repr(r))
 
 # REMARK: We need at least one statement after a function call
 # this statement is used as the point of return for the call
 # in the CFG
 if __name__ == '__main__':
-    r = main(sys.argv[1])
-    print('Result: %s ' % repr(r))
-    pass
+    main(sys.argv[1])

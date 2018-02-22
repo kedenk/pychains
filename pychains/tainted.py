@@ -29,11 +29,25 @@ class Instr:
     def o(self):
         if self.op == Op.EQ:
             return 'eq'
+        elif self.op == Op.NE:
+            return 'ne'
         else:
             return '?'
 
     def __repr__(self):
         return "(%s %s %s)" % (self.o(), repr(self.opA), repr(self.opB))
+
+    def __str__(self):
+        if self.op == Op.EQ:
+            if str(self.opA) == str(self.opB):
+                return "%s = %s" % (repr(self.opA), repr(self.opB))
+            else:
+                return "%s != %s" %  (repr(self.opA), repr(self.opB))
+        elif self.op == Op.NE:
+            if str(self.opA) == str(self.opB):
+                return "%s = %s" %  (repr(self.opA), repr(self.opB))
+            else:
+                return "%s != %s" %  (repr(self.opA), repr(self.opB))
 
 Comparisons = []
 class tstr_iterator():

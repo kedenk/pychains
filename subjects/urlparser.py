@@ -245,8 +245,10 @@ def urldefrag(url):
     else:
         return url, ''
 
+def main(arg):
+    print(urlsplit_orig(arg))
+
 
 if __name__ == "__main__":
-    result = urlsplit_orig(sys.argv[1])
-    print(result)
+    main(sys.argv[1])
 

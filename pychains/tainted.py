@@ -16,7 +16,9 @@ class Op(enum.Enum):
 
 COMPARE_OPERATORS = {
         Op.EQ: lambda x, y: x == y,
-        Op.IN: lambda x, y: x in y
+        Op.NE: lambda x, y: x != y,
+        Op.IN: lambda x, y: x in y,
+        Op.NOT_IN: lambda x, y: x not in y
         }
 
 class Instr:
@@ -173,6 +175,11 @@ class tstr(str):
         Comparisons.append(Instr(Op.EQ, self, other))
         return super().__eq__(other)
 
+    def __ne__(self, other):
+        global Comparisons
+        Comparisons.append(Instr(Op.NE, self, other))
+        return super().__ne__(other)
+
     def __contains__(self, other):
         global Comparisons
         Comparisons.append(Instr(Op.IN, self, other))
@@ -244,7 +251,8 @@ def make_str_wrapper(fun):
 for name, fn in inspect.getmembers(str, callable):
     if name not in ['__class__', '__new__', '__str__', '__init__', '__repr__',
             '__getattribute__', '__getitem__', '__rmod__', '__mod__', '__add__',
-            '__radd__', 'strip', 'lstrip', 'rstrip', '__iter__', 'expandtabs', '__format__', 'split', 'find', '__eq__']:
+            '__radd__', 'strip', 'lstrip', 'rstrip', '__iter__', 'expandtabs', '__format__', 'split', 'find',
+            '__eq__', '__ne__']:
         setattr(tstr, name, make_str_wrapper(fn))
 
 class mstr:

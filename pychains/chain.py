@@ -284,7 +284,7 @@ class Prefix:
 
         return []
 
-class ExecFile:
+class Chain:
 
     def __init__(self):
         self.initiate_bfs = False
@@ -373,5 +373,5 @@ if __name__ == '__main__':
     import imp
     arg = sys.argv[1]
     _mod = imp.load_source('mymod', arg)
-    e = ExecFile()
+    e = Chain()
     e.exec_argument(_mod.main)

@@ -239,7 +239,7 @@ class Prefix:
                 prefix = arg_prefix[:-1]
                 sols = []
                 chars = [new_char for v in corr for new_char in v]
-                chars = chars if WeightedGeneration else set(chars)
+                chars = chars if WeightedGeneration else sorted(set(chars))
                 for new_char in chars:
                     arg = "%s%s" % (prefix, new_char)
                     sols.append(Prefix(arg, fixes))

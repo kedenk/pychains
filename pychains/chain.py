@@ -131,6 +131,8 @@ class DFPrefix(Prefix):
         last_char_added = arg_prefix[-1]
         o = h.op
 
+        # TODO: be careful here. We are not verifying the .x
+        # we may be missing a trim.
         if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1:
             # Dont add IN and NOT_IN -- '0' in '0123456789' is a common
             # technique in char comparision to check for digits
@@ -275,9 +277,9 @@ class DFPrefix(Prefix):
             elif k == EState.Trim:
                 # we need to (1) find where h.opA._idx is within
                 # sys_args, and trim sys_args to that location
-                args = arg_prefix[h.opA.x():]
+                args = arg_prefix[:h.opA.x()]
                 # we already know the result for next character
-                fix =  [arg_prefix[h.opA.x()+1]]
+                fix =  [arg_prefix[h.opA.x()]]
                 sols = [self.create_prefix(args, fix)]
                 return sols # VERIFY - TODO
 
@@ -333,7 +335,10 @@ class Chain:
         self._my_args = []
 
     def add_sys_args(self, var):
-        if type(var) is not tainted.tstr: var = create_arg(var)
+        if type(var) is not tainted.tstr:
+            var = create_arg(var)
+        else:
+            var = create_arg(str(var))
         self._my_args.append(var)
 
     def sys_args(self):

@@ -48,6 +48,18 @@ class Instr:
                 return "%s = %s" %  (repr(self.opA), repr(self.opB))
             else:
                 return "%s != %s" %  (repr(self.opA), repr(self.opB))
+        elif self.op == Op.IN:
+            if str(self.opA) in str(self.opB):
+                return "%s in %s" % (repr(self.opA), repr(self.opB))
+            else:
+                return "%s not in %s" %  (repr(self.opA), repr(self.opB))
+        elif self.op == Op.NOT_IN:
+            if str(self.opA) in str(self.opB):
+                return "%s in %s" % (repr(self.opA), repr(self.opB))
+            else:
+                return "%s not in %s" %  (repr(self.opA), repr(self.opB))
+        else:
+            assert False
 
 Comparisons = []
 class tstr_iterator():
@@ -196,7 +208,7 @@ class tstr(str):
 
     def __contains__(self, other):
         global Comparisons
-        Comparisons.append(Instr(Op.IN, self, other))
+        Comparisons.append(Instr(Op.IN, other, self))
         return super().__contains__(other)
 
 import pudb
@@ -265,8 +277,8 @@ def make_str_wrapper(fun):
 for name, fn in inspect.getmembers(str, callable):
     if name not in ['__class__', '__new__', '__str__', '__init__', '__repr__',
             '__getattribute__', '__getitem__', '__rmod__', '__mod__', '__add__',
-            '__radd__', 'strip', 'lstrip', 'rstrip', '__iter__', 'expandtabs', '__format__', 'split', 'find',
-            '__eq__', '__ne__']:
+            '__radd__', 'strip', 'lstrip', 'rstrip', '__iter__', 'expandtabs',
+            '__format__', 'split', 'find', '__eq__', '__ne__', '__contains__']:
         setattr(tstr, name, make_str_wrapper(fn))
 
 class mstr:

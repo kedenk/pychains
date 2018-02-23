@@ -12,7 +12,7 @@ import random
 random.seed(RandomSeed)
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = 10000
+MaxIter = 100000
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
@@ -36,6 +36,8 @@ Track = True
 InitiateBFS = True
 
 Debug=1
+
+Log_Comparisons = 0
 
 WeightedGeneration=False
 
@@ -91,6 +93,31 @@ class Prefix:
 
     def __repr__(self):
         return repr(self.my_arg)
+
+    def solve(self, my_traces, i):
+        raise NotImplemnted
+
+    def prune(self, solutions):
+        raise NotImplemnted
+
+    def create_prefix(self, myarg, fixes=[]):
+        # should be overridden in child classes
+        raise NotImplemnted
+
+    def continue_valid(self):
+        return []
+
+class DFPrefix(Prefix):
+
+    def continue_valid(self):
+        if  random.uniform(0,1) > Return_Probability:
+            return [self.create_prefix(self.my_arg + random.choice(All_Characters))]
+
+    def prune(self, solutions):
+        return [random.choice(solutions)]
+
+    def create_prefix(self, myarg, fixes=[]):
+        return DFPrefix(myarg, fixes)
 
     def best_matching_str(self, elt, lst):
         largest, lelt = '', None
@@ -242,7 +269,7 @@ class Prefix:
                 chars = chars if WeightedGeneration else sorted(set(chars))
                 for new_char in chars:
                     arg = "%s%s" % (prefix, new_char)
-                    sols.append(Prefix(arg, fixes))
+                    sols.append(self.create_prefix(arg, fixes))
 
                 return sols
             elif k == EState.Trim:
@@ -251,7 +278,7 @@ class Prefix:
                 args = arg_prefix[h.opA.x():]
                 # we already know the result for next character
                 fix =  [arg_prefix[h.opA.x()+1]]
-                sols = [Prefix(args, fix)]
+                sols = [self.create_prefix(args, fix)]
                 return sols # VERIFY - TODO
 
             elif k == EState.String:
@@ -264,14 +291,14 @@ class Prefix:
                 common = os.path.commonprefix([str(h.opA), opB])
                 assert str(h.opB)[len(common)-1] == last_char_added
                 arg = "%s%s" % (arg_prefix, str(h.opB)[len(common):])
-                sols = [Prefix(arg)]
+                sols = [self.create_prefix(arg)]
                 return sols
             elif k == EState.EOF:
                 # An empty comparison at the EOF
                 sols = []
                 for new_char in All_Characters:
                     arg = "%s%s" % (arg_prefix, new_char)
-                    sols.append(Prefix(arg))
+                    sols.append(self.create_prefix(arg))
 
                 return sols
             elif k == EState.Unknown:
@@ -283,75 +310,6 @@ class Prefix:
                 assert False
 
         return []
-
-class BFSPrefix(Prefix):
-
-    # parent is an object of class BFSPrefix
-    # change is a tuple of a position and a string. This tuple is used to determine a substitution
-    # parentstring is the string which caused the generation of this specific node
-    def __init__(self, prefix = None, parent = None, change = (0, 0, 0, "A", [], None)):
-        self.children = []
-        self.parent = parent
-        self.change = change
-        self.parentstring = change[5]
-        if prefix != None:
-            self.change = (0, len(prefix.my_arg) - 1, len(prefix.my_arg) - 1, prefix.my_arg[-1], [], prefix.my_arg)
-            self.parentstring = self.change[5]
-            self.my_arg = self.get_substituted_string()
-        else:
-            self.my_arg = self.get_next_input()
-        pass
-
-    # gets a list of children to add to this node
-    def addChildren(self, children):
-        self.children += children
-
-    # returns the next child in list and removes this object from the list
-    def get_next_child(self):
-        return self.children.pop(0)
-
-    # checks if there are still children in the list
-    def child_exists(self):
-        return self.children
-
-    # replaces at changepos the char with the given replacement in the parentstring
-    # the tuple looks like
-    #   (heuristic value,
-    #   change_position,
-    #   position for new observation,
-    #   string used for replacement,
-    #   list of comparisons made on the char under observation,
-    #   string that was used as input for the parent which lead to the production of this Node)
-    #
-    # the heursitic value is currently not used but might be in future
-    def get_substituted_string(self):
-        return self.parentstring[0:self.change[1]] + self.change[3] + self.parentstring[self.change[1] + 1:]
-
-    # returns a new input by substituting the change position and adding a new char at the next position that should be observed
-    def get_next_input(self):
-        next_input = self.get_substituted_string()
-        return next_input[:self.change[2]] + "A" + next_input[self.change[2]:]
-
-    # returns the position of the character under observation
-    def get_observation_pos(self):
-        return self.change[2]
-
-    # returns the position that is substituted
-    def get_subst_pos(self):
-        return self.change[1]
-
-    # returns the comparisons made on the position that is substituted
-    def get_comparisons(self):
-        return self.change[4]
-
-    # returns the string that is used for the substitution
-    def get_string_of_subsitution(self):
-        return self.change[3]
-
-    # To get solutions from bjoern
-    def solve(self, my_traces, i):
-        # for now
-        return super().solve(self, my_traces, i)
 
 class Chain:
 
@@ -388,18 +346,20 @@ class Chain:
         self.current_prefix = prefix
         self.add_sys_args(prefix.my_arg)
 
+    def log_comparisons(self):
+        if Log_Comparisons:
+            for c in tainted.Comparisons: print(c.opA._idx, c)
+
     def exec_argument(self, fn):
         self.start_i = 0
         if Load: self.load(Load)
 
         # replace interesting things
-        # env['type'] = my_type
-        p = Prefix(random.choice(All_Characters))
-        solution_stack = [p]
+        solution_stack = [DFPrefix(random.choice(All_Characters))]
 
         for i in range(self.start_i, MaxIter):
-            p, *solution_stack = solution_stack
-            self.apply_prefix(p)
+            my_prefix, *solution_stack = solution_stack
+            self.apply_prefix(my_prefix)
             self.start_i = i
             if Dump: self.dump()
             tainted.Comparisons = []
@@ -407,36 +367,24 @@ class Chain:
                 log(">> %s" % self.sys_args(), 1)
                 v = fn(self.sys_args())
                 print('Arg: %s' % repr(self.sys_args()))
-                if random.uniform(0,1) > Return_Probability:
-                    continue
-                else:
+                self.log_comparisons()
+                solution_stack = my_prefix.continue_valid()
+                if not solution_stack:
                     return v
             except Exception as e:
                 if i == MaxIter//100 and InitiateBFS:
                     print('with BFS', flush=True)
-                    self.initiate_bfs = True
                     self.current_prefix = BFSPrefix(self.current_prefix)
                 traces = tainted.Comparisons
-                # fixes are characters that have been tried at that particular
-                # position already.
                 solutions = self.current_prefix.solve(traces, i)
+                solution_stack = self.current_prefix.prune(solutions)
 
-                if not solutions and not self.initiate_bfs:
+                if not solution_stack:
                     # remove one character and try again.
                     new_arg = self.sys_args()[:-1]
                     if not new_arg:
-                        # we failed utterly
                         raise Exception('No suitable continuation found')
-                    p = Prefix(new_arg)
-                    solutions = [p]
-
-                if self.initiate_bfs:
-                    log('BFS')
-                    # Naive BFS
-                    solution_stack.extend(solutions)
-                else:
-                    prefix = random.choice(solutions)
-                    solution_stack = [prefix]
+                    solution_stack = [p.create_prefix(new_arg)]
 
 
 class BFSPrefix(Prefix):
@@ -504,6 +452,13 @@ class BFSPrefix(Prefix):
     # returns the string that is used for the substitution
     def get_string_of_subsitution(self):
         return self.change[3]
+
+    def create_prefix(self, myarg, fixes=[]):
+        return BFSPrefix(myarg, fixes)
+
+    # implement a better prune
+    def prune(self, solutions):
+        return solutions
 
     # lets first use a simple approach where strong equality is used for replacement in the first input
     # also we use parts of the rhs of the in statement as substitution

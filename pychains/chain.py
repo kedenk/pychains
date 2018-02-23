@@ -5,14 +5,14 @@ import enum
 import sys
 
 import tainted
-from tainted import Op
+from tainted import Op, tstr
 
-RandomSeed = int(os.getenv('R') or '0')
+RandomSeed = 115 #int(os.getenv('R') or '2')
 import random
 random.seed(RandomSeed)
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = 100000
+MaxIter = 10000
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
@@ -44,6 +44,8 @@ WeightedGeneration=False
 All_Characters = list(string.printable + string.whitespace)
 
 CmpSet = [Op.EQ, Op.NE, Op.IN, Op.NOT_IN]
+
+Comparison_Equality_Chain = 3
 
 def log(var, i=1):
     if Debug >= i: print(repr(var), file=sys.stderr, flush=True)
@@ -97,7 +99,7 @@ class Prefix:
     def solve(self, my_traces, i):
         raise NotImplemnted
 
-    def prune(self, solutions):
+    def prune(self, solutions, fn):
         raise NotImplemnted
 
     def create_prefix(self, myarg, fixes=[]):
@@ -113,7 +115,7 @@ class DFPrefix(Prefix):
         if  random.uniform(0,1) > Return_Probability:
             return [self.create_prefix(self.my_arg + random.choice(All_Characters))]
 
-    def prune(self, solutions):
+    def prune(self, solutions, fn):
         return [random.choice(solutions)]
 
     def create_prefix(self, myarg, fixes=[]):
@@ -377,7 +379,7 @@ class Chain:
                     self.current_prefix = BFSPrefix(self.current_prefix)
                 traces = tainted.Comparisons
                 solutions = self.current_prefix.solve(traces, i)
-                solution_stack = self.current_prefix.prune(solutions)
+                solution_stack += self.current_prefix.prune(solutions, fn)
 
                 if not solution_stack:
                     # remove one character and try again.
@@ -389,6 +391,8 @@ class Chain:
 
 class BFSPrefix(Prefix):
 
+    already_seen = set()
+
     # parent is an object of class BFSPrefix
     # change is a tuple of a position and a string. This tuple is used to determine a substitution
     # parentstring is the string which caused the generation of this specific node
@@ -397,6 +401,7 @@ class BFSPrefix(Prefix):
         self.parent = parent
         self.change = change
         self.parentstring = change[5]
+        self.causes_crash = True
         if prefix != None:
             self.change = (0, len(prefix.my_arg) - 1, len(prefix.my_arg) - 1, prefix.my_arg[-1], [], prefix.my_arg)
             self.parentstring = self.change[5]
@@ -456,29 +461,115 @@ class BFSPrefix(Prefix):
     def create_prefix(self, myarg, fixes=[]):
         return BFSPrefix(myarg, fixes)
 
+    ################# Input pruning ###############################################
     # implement a better prune
-    def prune(self, solutions):
+    def prune(self, solutions, fn):
+        # filter for inputs, that do not lead to success, i.e. inputs that are already correct and inputs that
+        # can be pruned in another form (see prune_input for more information)
+        for node in list(solutions):
+            if self._prune_input(node):
+                solutions.remove(node)
+                continue
+            if self._check_seen(BFSPrefix.already_seen, node):
+                solutions.remove(node)
+                continue
+            if not self._check_exception(node, fn):
+                solutions.remove(node)
+
+                # this is very hacky, check how to stop when string in node does not cause a crash
+                log("Arg: " + repr(node.get_substituted_string()))
+                sys.exit(0)
         return solutions
+
+
+    # for inputs with length greater 3 we can assume that if
+    # it ends with a value which was not successful for a small input
+    def _prune_input(self, node):
+        s = node.get_substituted_string()
+        # we do not need to create arbitrarily long strings, such a thing will likely end in an infinite
+        # string, so we prune branches starting here
+        if "BBBA" in node.get_next_input():
+            return True
+        if len(s) <= 3:
+            return False
+        # print(repr(s), repr(s[0:len(s) // 2]), repr(s[len(s) // 2:]))
+        if s[len(s) // 2:].endswith(s[0:len(s) // 2]):
+            return True
+        if self._comparison_chain_equal(node):
+            return True
+        return False
+
+    # TODO this can be done just on the parent instead of checking for all children
+    def _comparison_chain_equal(self, node):
+        global Comparison_Equality_Chain
+        initial_trace = node.get_comparisons()
+        for i_eq in range(0, Comparison_Equality_Chain):
+            if node.parent is None:
+                return False
+            node = node.parent
+            cmp_trace = node.get_comparisons()
+            if len(cmp_trace) != len(initial_trace):
+                return False
+            i = 0
+            for i in range(0, len(cmp_trace)):
+                cmp = cmp_trace[i]
+                init = initial_trace[i]
+                if cmp != init:
+                    if not self._compare_predicates_in_detail(cmp, init):
+                        return False
+        return True
+
+    # checks if two predicates are equal for some special cases like in or special function calls
+    def _compare_predicates_in_detail(self, cmp, init):
+        if cmp.op == init.op:
+            # for split and find on string check if the value to look for is the same, if yes return true
+            if cmp.op in [Op.SPLIT_STR, Op.FIND_STR]:
+                return cmp.opA[-1] == cmp.opA[-1]
+            if cmp.op in [Op.IN, Op.NOT_IN]:
+                return False
+        return False
+
+    # check if the input is already in the queue, if yes one can just prune it at this point
+    def _check_seen(self, already_seen, node):
+        s = node.get_next_input()
+        if s in already_seen:
+            return True
+        already_seen.add(node.get_next_input())
+
+    # check if an input causes a crash, if not it is likely successful and can be reported
+    # TODO this is currently quite inefficient, since we run the prog on each input twice, should be changed in future
+    def _check_exception(self, node, fn):
+        next_input = node.get_substituted_string()
+
+        try:
+            fn(str(next_input))
+        except Exception as e:
+            return True
+
+        node.causes_crash = False
+        return False
+
+    ######################### Comparison filtering and new BFS_Prefix generation #######################################
 
     # lets first use a simple approach where strong equality is used for replacement in the first input
     # also we use parts of the rhs of the in statement as substitution
     def solve(self, my_traces, i):
         # for now
         next_inputs = list()
-        current = self.args[0]
+        current = self.my_arg
         length_next_inputs = 0
         comparisons = list()
-        for t in self.trace:
-            if t[0] == Op.EQ or t[0] == Op.NE:
-                next_inputs += self.eq_next_inputs(t, current, pos, comparisons, Track)
-            elif t[0] == Op.IN or t[0] == Op.NOT_IN:
-                next_inputs += self.in_next_inputs(t, current, pos, comparisons, Track)
-            elif t[0] == Functions.find_str or t[0] == Functions.find_tstr:
-                next_inputs += self.str_find_next_inputs(t, current, pos, comparisons, Track)
-            elif t[0] == Functions.split_str or t[0] == Functions.split_tstr:
-                next_inputs += self.str_split_next_inputs(t, current, pos, comparisons, Track)
-            elif t[0] == Functions.match_sre:
-                next_inputs += self.match_sre_next_inputs(t, current, pos, comparisons)
+        for t in my_traces:
+            if t.op == Op.EQ or t.op == Op.NE:
+                next_inputs += self._eq_next_inputs(t, current, self.obs_pos, comparisons, Track)
+            elif t.op == Op.IN or t.op == Op.NOT_IN:
+                next_inputs += self._in_next_inputs(t, current, self.obs_pos, comparisons, Track)
+            elif t.op == Op.FIND_STR:
+                next_inputs += self._str_find_next_inputs(t, current, self.obs_pos, comparisons, Track)
+            elif t.op == Op.SPLIT_STR:
+                next_inputs += self._str_split_next_inputs(t, current, self.obs_pos, comparisons, Track)
+            # elif t[0] == Functions.match_sre:
+            #     next_inputs += self.match_sre_next_inputs(t, current, pos, comparisons)
 
             if len(next_inputs) > length_next_inputs:
                 length_next_inputs = len(next_inputs)
@@ -488,12 +579,17 @@ class BFSPrefix(Prefix):
         # if nothing else was added, this means, that the character at the position under observation did not have a
         # comparison, so we do also not add a "B", because the prefix is likely already completely wrong
         if next_inputs:
-            next_inputs += [(0, pos, pos + 1, "B", comparisons, current)]
-        return next_inputs
+            next_inputs += [(0, self.obs_pos, self.obs_pos + 1, "B", comparisons, current)]
+
+        # now make the list of tuples a list of prefixes
+        prefix_list = list()
+        for input in next_inputs:
+            prefix_list.append(BFSPrefix(prefix=None, change=input, parent=self))
+        return prefix_list
 
     # appends a new input based on the current checking position, the subst. and the value which was used for the run
     # the next position to observe will lie directly behind the substituted position
-    def append_new_input(self, next_inputs, pos, subst, current, comparisons):
+    def _append_new_input(self, next_inputs, pos, subst, current, comparisons):
         next_inputs.append((0, pos, pos + len(subst), subst, comparisons, current))
         # if the character under observation lies in the middle of the string, it might be that we fulfilled the
         # constraint and should now start with appending stuff to the string again (new string will have length of
@@ -503,16 +599,16 @@ class BFSPrefix(Prefix):
 
     # apply the substitution for equality comparisons
     # TODO find all occ. in near future
-    def eq_next_inputs(self, trace_line, current, pos, comparisons, Track):
-        compare = trace_line[1]
+    def _eq_next_inputs(self, trace_line, current, pos, comparisons, Track):
+        compare = (trace_line.opA, trace_line.opB)
         next_inputs = list()
         # if we use taint tracking, use another approach
         if Track:
             # check if the position that is currently watched is part of the taint
-            if type(compare[0]) is tstr and compare[0].get_first_mapped_char() + len(compare[0]) >= pos:
-                self.append_new_input(next_inputs, pos, compare[1], current, comparisons)
-            elif type(compare[1]) is tstr and compare[1].get_first_mapped_char() + len(compare[1]) >= pos:
-                self.append_new_input(next_inputs, pos, compare[0], current, comparisons)
+            if type(compare[0]) is tstr and compare[0].get_first_mapped_char() + len(compare[0]) > pos >= compare[0].get_first_mapped_char():
+                self._append_new_input(next_inputs, pos, compare[1], current, comparisons)
+            elif type(compare[1]) is tstr and compare[1].get_first_mapped_char() + len(compare[1]) > pos >= compare[0].get_first_mapped_char():
+                self._append_new_input(next_inputs, pos, compare[0], current, comparisons)
             else:
                 return []
             return next_inputs
@@ -530,14 +626,14 @@ class BFSPrefix(Prefix):
         find1 = current.find(cmp1_str)
         # check if actually the char at the pos we are currently checking was checked in the comparison
         if find0 == pos:
-            self.append_new_input(next_inputs, pos, cmp1_str, current, comparisons)
+            self._append_new_input(next_inputs, pos, cmp1_str, current, comparisons)
         elif find1 == pos:
-            self.append_new_input(next_inputs, pos, cmp0_str, current, comparisons)
+            self._append_new_input(next_inputs, pos, cmp0_str, current, comparisons)
 
         return next_inputs
 
     # apply the subsititution for the in statement
-    def in_next_inputs(self, trace_line, current, pos, comparisons, Track):
+    def _in_next_inputs(self, trace_line, current, pos, comparisons, Track):
         compare = trace_line[1]
         next_inputs = list()
         if Track:
@@ -547,12 +643,12 @@ class BFSPrefix(Prefix):
                 for cmp in compare[1]:
                     if compare[0] == cmp:
                         continue
-                    if counter > self.expand_in:
+                    if counter > self._expand_in:
                         break
                     counter += 1
-                    self.append_new_input(next_inputs, pos, cmp, current, comparisons)
-            elif self.check_in_tstr(compare[1], pos, compare[0]):
-                self.append_new_input_non_direct_replace(next_inputs, current, compare[0], pos, comparisons)
+                    self._append_new_input(next_inputs, pos, cmp, current, comparisons)
+            elif self._check_in_tstr(compare[1], pos, compare[0]):
+                self._append_new_input_non_direct_replace(next_inputs, current, compare[0], pos, comparisons)
             else:
                 return []
             return next_inputs
@@ -565,7 +661,7 @@ class BFSPrefix(Prefix):
         for cmp in compare[1]:
             # only take a subset of the rhs (the collection in is applied on)
             # TODO in some cases it is important to take the whole content of a collection into account
-            if counter >= self.expand_in:
+            if counter >= self._expand_in:
                 break
             counter += 1
             cmp1_str = str(cmp)
@@ -574,7 +670,7 @@ class BFSPrefix(Prefix):
             # self.changed.add(str(trace_line))
             find0 = current.find(cmp0_str)
             if find0 == pos:
-                self.append_new_input(next_inputs, pos, cmp1_str, current, comparisons)
+                self._append_new_input(next_inputs, pos, cmp1_str, current, comparisons)
 
         # it could also be, that a char is searched in the rhs, if this is the case, we have to handle this like in find
         # but only if the lhs is not the char under observation and only if the char we look for does not already exist
@@ -582,24 +678,24 @@ class BFSPrefix(Prefix):
         # concretely we check if the rhs is a substring of the current input, if yes we are looking for something in the
         # current input
         check_char = current[pos]
-        if not next_inputs and self.check_in_string(compare[1], current, check_char, cmp0_str):
-            self.append_new_input_non_direct_replace(next_inputs, current, cmp0_str, pos, comparisons)
+        if not next_inputs and self._check_in_string(compare[1], current, check_char, cmp0_str):
+            self._append_new_input_non_direct_replace(next_inputs, current, cmp0_str, pos, comparisons)
 
         return next_inputs
 
     # checks if the lhs is not in comp, comp is a non-empty string which is in current and the check_char must also
     # be in current
-    def check_in_string(self, comp, current, check_char, lhs):
+    def _check_in_string(self, comp, current, check_char, lhs):
         return type(comp) is str and lhs not in comp \
                and comp != '' and comp in current and check_char in comp
 
     # checks if the lhs is not in comp, comp is a non-empty string which is in current and the check_char must also
     # be in current for tstr
-    def check_in_tstr(self, comp, pos, lhs):
+    def _check_in_tstr(self, comp, pos, lhs):
         return type(comp) is tstr and lhs not in comp \
                and str(comp) != '' and comp.get_first_mapped_char() + len(comp) >= pos
 
-    def str_split_next_inputs(self, t, current, pos, comparisons, Track):
+    def _str_split_next_inputs(self, t, current, pos, comparisons, Track):
         # split is the same as find, but it may have a parameter which defines how many splits should be performed,
         # this does not interest us at the moment
         # TODO in future take the number of splits into account
@@ -607,9 +703,9 @@ class BFSPrefix(Prefix):
             t[1][3] = 0
         except:
             pass
-        return self.str_find_next_inputs(t, current, pos, comparisons, Track)
+        return self._str_find_next_inputs(t, current, pos, comparisons, Track)
 
-    def str_find_next_inputs(self, t, current, pos, comparisons, Track):
+    def _str_find_next_inputs(self, t, current, pos, comparisons, Track):
         # t[1][2] is the string which is searched for in the input, replace A with this string
         input_string = t[1][2]
         beg = 0
@@ -625,21 +721,21 @@ class BFSPrefix(Prefix):
         check_char = current[pos]
         if Track:
             # check if the position that is currently watched is part of the taint
-            if self.check_in_tstr(t[1][0][beg:end], pos, input_string):
-                next_inputs = self.append_new_input_non_direct_replace(next_inputs, current, input_string, pos,
+            if self._check_in_tstr(t[1][0][beg:end], pos, input_string):
+                next_inputs = self._append_new_input_non_direct_replace(next_inputs, current, input_string, pos,
                                                                        comparisons)
 
             return next_inputs
 
-        if not self.check_in_string(t[1][0][beg:end], current, check_char, input_string):
+        if not self._check_in_string(t[1][0][beg:end], current, check_char, input_string):
             return []
         # here we have to handle the input appending ourselves since we have a special case
         # replace the position under observation with the new input string and ...
-        next_inputs = self.append_new_input_non_direct_replace(next_inputs, current, input_string, pos, comparisons)
+        next_inputs = self._append_new_input_non_direct_replace(next_inputs, current, input_string, pos, comparisons)
         return next_inputs
 
     # instead of replacing the char under naively, we replace the char and either look at the positions specified below
-    def append_new_input_non_direct_replace(self, next_inputs, current, input_string, pos, comparisons):
+    def _append_new_input_non_direct_replace(self, next_inputs, current, input_string, pos, comparisons):
         # set the next position behind what we just replaced
         next_inputs.append((0, pos, pos + len(input_string), input_string, comparisons, current))
         # set the next position in front of what we just replaced
@@ -651,30 +747,30 @@ class BFSPrefix(Prefix):
             next_inputs.append((0, pos, len(current), input_string, comparisons, current))
         return next_inputs
 
-    def match_sre_next_inputs(self, trace_line, current, pos, comparisons):
-        pattern = trace_line[1][0].pattern
-        string = exrex.getone(pattern)
-        # we use A as the char which is checked against, so at at this point we should
-        string = string.replace("A", "B")
-        # TODO replacement needs to be done on the whole string that is tried to be matched, this feature
-        # needs to be implemented
-
-        # TODO also we should check if the string was matched, if yes we should replace with something non-matching
-
-        # TODO actually the best idea would be to see where the regex fails first and only replace the failing suffix
-
-        # TODO also we have to think about optional creations, so in the end we should think about how to produce
-        # strings properly from the regex
-        next_inputs = list()
-        to_match = trace_line[1][2]
-        if to_match in current:
-            match_pos = current.find(to_match)
-            # from the current input cut out whatever was tried to be matched and replace it later with what was
-            # tried to be matched (i.e. a representative of the regex), therefore the A is still included
-            new_current = current[:match_pos] + "A" + current[match_pos + len(to_match):]
-            pos = match_pos
-            self.append_new_input(next_inputs, pos, string, new_current, comparisons)
-        return next_inputs
+    # def match_sre_next_inputs(self, trace_line, current, pos, comparisons):
+    #     pattern = trace_line[1][0].pattern
+    #     string = exrex.getone(pattern)
+    #     # we use A as the char which is checked against, so at at this point we should
+    #     string = string.replace("A", "B")
+    #     # TODO replacement needs to be done on the whole string that is tried to be matched, this feature
+    #     # needs to be implemented
+    #
+    #     # TODO also we should check if the string was matched, if yes we should replace with something non-matching
+    #
+    #     # TODO actually the best idea would be to see where the regex fails first and only replace the failing suffix
+    #
+    #     # TODO also we have to think about optional creations, so in the end we should think about how to produce
+    #     # strings properly from the regex
+    #     next_inputs = list()
+    #     to_match = trace_line[1][2]
+    #     if to_match in current:
+    #         match_pos = current.find(to_match)
+    #         # from the current input cut out whatever was tried to be matched and replace it later with what was
+    #         # tried to be matched (i.e. a representative of the regex), therefore the A is still included
+    #         new_current = current[:match_pos] + "A" + current[match_pos + len(to_match):]
+    #         pos = match_pos
+    #         self.append_new_input(next_inputs, pos, string, new_current, comparisons)
+    #     return next_inputs
 
 if __name__ == '__main__':
     import imp

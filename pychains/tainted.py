@@ -13,6 +13,8 @@ class Op(enum.Enum):
     IS = enum.auto()
     IS_NOT = enum.auto()
     ISSUBCLASS = enum.auto()
+    FIND_STR = enum.auto()
+    SPLIT_STR = enum.auto()
 
 COMPARE_OPERATORS = {
         Op.EQ: lambda x, y: x == y,
@@ -93,10 +95,12 @@ class tstr(str):
                 rest= super().__getitem__(slice(fr, None, None))
                 sep_len = rest.find(nxt)
             index_counter += len(s) + sep_len
+        Comparisons.append(Instr(Op.SPLIT_STR, self, sep))
         return result_list
 
 
     def find(self, sub, start=None, end=None):
+        Comparisons.append(Instr(Op.FIND_STR, self, sub))
         return super().find(sub, start, end)
 
 

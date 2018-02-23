@@ -274,8 +274,9 @@ class DFPrefix(Prefix):
                 return sols
             elif k == EState.Trim:
                 # we need to (1) find where h.opA._idx is within
-                # sys_args, and trim sys_args to that location
-                args = arg_prefix[:h.opA.x()]
+                # sys_args, and trim sys_args to that location, and
+                # add a new character.
+                args = arg_prefix[:h.opA.x()] + random.choice(All_Characters)
                 # we already know the result for next character
                 fix =  [arg_prefix[h.opA.x()]]
                 sols = [self.create_prefix(args, fix)]

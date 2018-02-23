@@ -284,6 +284,12 @@ class Prefix:
 
         return []
 
+class BFSPrefix(Prefix):
+    # To get solutions from bjoern
+    def solve(self, my_traces, i):
+        # for now
+        return super().solve(self, my_traces, i)
+
 class Chain:
 
     def __init__(self):
@@ -346,6 +352,7 @@ class Chain:
                 if i == MaxIter//100 and InitiateBFS:
                     print('with BFS', flush=True)
                     self.initiate_bfs = True
+                    self.current_prefix = BFSPrefix(self.current_prefix)
                 traces = tainted.Comparisons
                 # fixes are characters that have been tried at that particular
                 # position already.
@@ -363,7 +370,6 @@ class Chain:
                 if self.initiate_bfs:
                     log('BFS')
                     # Naive BFS
-                    # To get solutions from bjoern
                     solution_stack.extend(solutions)
                 else:
                     prefix = random.choice(solutions)

@@ -131,15 +131,13 @@ class DFPrefix(Prefix):
         last_char_added = arg_prefix[-1]
         o = h.op
 
-        # TODO: be careful here. We are not verifying the .x
-        # we may be missing a trim.
-        if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1:
+        if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1 and h.opA.x() == last_char_added.x():
             # Dont add IN and NOT_IN -- '0' in '0123456789' is a common
             # technique in char comparision to check for digits
             # A string comparison rather than a character comparison.
             return (1, EState.String, h)
 
-        elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
+        elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1 and h.opA.x() == last_char_added.x():
             # A string comparison rather than a character comparison.
             return (1, EState.String, h)
 

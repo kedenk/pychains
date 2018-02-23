@@ -7,7 +7,7 @@ import sys
 import tainted
 from tainted import Op, tstr
 
-RandomSeed = 115 #int(os.getenv('R') or '2')
+RandomSeed = int(os.getenv('R') or '0')
 import random
 random.seed(RandomSeed)
 
@@ -399,6 +399,13 @@ class BFSPrefix(Prefix):
 
     # parent is an object of class BFSPrefix
     # change is a tuple of a position and a string. This tuple is used to determine a substitution
+    # the tuple looks like
+    #   (heuristic value,
+    #   change_position,
+    #   position for new observation,
+    #   string used for replacement,
+    #   list of comparisons made on the char under observation,
+    #   string that was used as input for the parent which lead to the production of this Node)
     # parentstring is the string which caused the generation of this specific node
     def __init__(self, prefix = None, parent = None, change = (0, 0, 0, "A", [], None)):
         self.children = []
@@ -429,14 +436,6 @@ class BFSPrefix(Prefix):
         return self.children
 
     # replaces at changepos the char with the given replacement in the parentstring
-    # the tuple looks like
-    #   (heuristic value,
-    #   change_position,
-    #   position for new observation,
-    #   string used for replacement,
-    #   list of comparisons made on the char under observation,
-    #   string that was used as input for the parent which lead to the production of this Node)
-    #
     # the heursitic value is currently not used but might be in future
     def get_substituted_string(self):
         return self.parentstring[0:self.change[1]] + self.change[3] + self.parentstring[self.change[1] + 1:]
@@ -565,13 +564,13 @@ class BFSPrefix(Prefix):
         comparisons = list()
         for t in my_traces:
             if t.op == Op.EQ or t.op == Op.NE:
-                next_inputs += self._eq_next_inputs(t, current, self.obs_pos, comparisons, Track)
+                next_inputs += self._eq_next_inputs(t, current, self.obs_pos, comparisons)
             elif t.op == Op.IN or t.op == Op.NOT_IN:
-                next_inputs += self._in_next_inputs(t, current, self.obs_pos, comparisons, Track)
+                next_inputs += self._in_next_inputs(t, current, self.obs_pos, comparisons)
             elif t.op == Op.FIND_STR:
-                next_inputs += self._str_find_next_inputs(t, current, self.obs_pos, comparisons, Track)
+                next_inputs += self._str_find_next_inputs(t, current, self.obs_pos, comparisons)
             elif t.op == Op.SPLIT_STR:
-                next_inputs += self._str_split_next_inputs(t, current, self.obs_pos, comparisons, Track)
+                next_inputs += self._str_split_next_inputs(t, current, self.obs_pos, comparisons)
             # elif t[0] == Functions.match_sre:
             #     next_inputs += self.match_sre_next_inputs(t, current, pos, comparisons)
 
@@ -601,43 +600,46 @@ class BFSPrefix(Prefix):
         if pos < len(current) - 1:
             next_inputs.append((0, pos, len(current) + len(subst) - 1, subst, comparisons, current))
 
+    # Look for an comparisons on a given index (pos).
     # apply the substitution for equality comparisons
+    # current is the current argument
     # TODO find all occ. in near future
-    def _eq_next_inputs(self, trace_line, current, pos, comparisons, Track):
+    # pos is the position being observed.
+    def _eq_next_inputs(self, trace_line, current, pos, comparisons):
         compare = (trace_line.opA, trace_line.opB)
         next_inputs = list()
         # if we use taint tracking, use another approach
         if Track:
             # check if the position that is currently watched is part of the taint
-            if type(compare[0]) is tstr and compare[0].get_first_mapped_char() + len(compare[0]) > pos >= compare[0].get_first_mapped_char():
+            if type(compare[0]) is tstr and compare[0].get_first_mapped_char() <= pos < compare[0].get_first_mapped_char() + len(compare[0]):
                 self._append_new_input(next_inputs, pos, compare[1], current, comparisons)
-            elif type(compare[1]) is tstr and compare[1].get_first_mapped_char() + len(compare[1]) > pos >= compare[0].get_first_mapped_char():
+            elif type(compare[1]) is tstr and compare[1].get_first_mapped_char() <= pos < compare[1].get_first_mapped_char() + len(compare[1]):
                 self._append_new_input(next_inputs, pos, compare[0], current, comparisons)
             else:
                 return []
             return next_inputs
+        else:
+            # verify that both operands are string
+            if type(compare[0]) is not str or type(compare[1]) is not str:
+                return []
+            cmp0_str = str(compare[0])
+            cmp1_str = str(compare[1])
+            if compare[0] == compare[1]:
+                return []
 
-        # verify that both operands are string
-        if type(compare[0]) is not str or type(compare[1]) is not str:
-            return []
-        cmp0_str = str(compare[0])
-        cmp1_str = str(compare[1])
-        if compare[0] == compare[1]:
-            return []
+            # self.changed.add(str(trace_line))
+            find0 = current.find(cmp0_str)
+            find1 = current.find(cmp1_str)
+            # check if actually the char at the pos we are currently checking was checked in the comparison
+            if find0 == pos:
+                self._append_new_input(next_inputs, pos, cmp1_str, current, comparisons)
+            elif find1 == pos:
+                self._append_new_input(next_inputs, pos, cmp0_str, current, comparisons)
 
-        # self.changed.add(str(trace_line))
-        find0 = current.find(cmp0_str)
-        find1 = current.find(cmp1_str)
-        # check if actually the char at the pos we are currently checking was checked in the comparison
-        if find0 == pos:
-            self._append_new_input(next_inputs, pos, cmp1_str, current, comparisons)
-        elif find1 == pos:
-            self._append_new_input(next_inputs, pos, cmp0_str, current, comparisons)
-
-        return next_inputs
+            return next_inputs
 
     # apply the subsititution for the in statement
-    def _in_next_inputs(self, trace_line, current, pos, comparisons, Track):
+    def _in_next_inputs(self, trace_line, current, pos, comparisons):
         compare = trace_line[1]
         next_inputs = list()
         if Track:
@@ -656,36 +658,37 @@ class BFSPrefix(Prefix):
             else:
                 return []
             return next_inputs
-        # the lhs must be a string
-        if type(compare[0]) is not str:
-            return []
-        cmp0_str = str(compare[0])
-        counter = 0
-        # take some samples from the collection in is applied on
-        for cmp in compare[1]:
-            # only take a subset of the rhs (the collection in is applied on)
-            # TODO in some cases it is important to take the whole content of a collection into account
-            if counter >= self._expand_in:
-                break
-            counter += 1
-            cmp1_str = str(cmp)
-            if compare[0] == cmp:
-                continue
-            # self.changed.add(str(trace_line))
-            find0 = current.find(cmp0_str)
-            if find0 == pos:
-                self._append_new_input(next_inputs, pos, cmp1_str, current, comparisons)
+        else:
+            # the lhs must be a string
+            if type(compare[0]) is not str:
+                return []
+            cmp0_str = str(compare[0])
+            counter = 0
+            # take some samples from the collection in is applied on
+            for cmp in compare[1]:
+                # only take a subset of the rhs (the collection in is applied on)
+                # TODO in some cases it is important to take the whole content of a collection into account
+                if counter >= self._expand_in:
+                    break
+                counter += 1
+                cmp1_str = str(cmp)
+                if compare[0] == cmp:
+                    continue
+                # self.changed.add(str(trace_line))
+                find0 = current.find(cmp0_str)
+                if find0 == pos:
+                    self._append_new_input(next_inputs, pos, cmp1_str, current, comparisons)
 
-        # it could also be, that a char is searched in the rhs, if this is the case, we have to handle this like in find
-        # but only if the lhs is not the char under observation and only if the char we look for does not already exist
-        # in the string we are searching
-        # concretely we check if the rhs is a substring of the current input, if yes we are looking for something in the
-        # current input
-        check_char = current[pos]
-        if not next_inputs and self._check_in_string(compare[1], current, check_char, cmp0_str):
-            self._append_new_input_non_direct_replace(next_inputs, current, cmp0_str, pos, comparisons)
+            # it could also be, that a char is searched in the rhs, if this is the case, we have to handle this like in find
+            # but only if the lhs is not the char under observation and only if the char we look for does not already exist
+            # in the string we are searching
+            # concretely we check if the rhs is a substring of the current input, if yes we are looking for something in the
+            # current input
+            check_char = current[pos]
+            if not next_inputs and self._check_in_string(compare[1], current, check_char, cmp0_str):
+                self._append_new_input_non_direct_replace(next_inputs, current, cmp0_str, pos, comparisons)
 
-        return next_inputs
+            return next_inputs
 
     # checks if the lhs is not in comp, comp is a non-empty string which is in current and the check_char must also
     # be in current
@@ -699,7 +702,7 @@ class BFSPrefix(Prefix):
         return type(comp) is tstr and lhs not in comp \
                and str(comp) != '' and comp.get_first_mapped_char() + len(comp) >= pos
 
-    def _str_split_next_inputs(self, t, current, pos, comparisons, Track):
+    def _str_split_next_inputs(self, t, current, pos, comparisons):
         # split is the same as find, but it may have a parameter which defines how many splits should be performed,
         # this does not interest us at the moment
         # TODO in future take the number of splits into account

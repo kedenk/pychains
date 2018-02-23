@@ -10,6 +10,7 @@ from enum import Enum
 from random import shuffle
 import string
 import exrex
+from .tstr import tstr
 
 class Operator(Enum):
     LT = 0
@@ -29,6 +30,8 @@ class Functions(Enum):
     find_str = 11
     split_str = 12
     match_sre = 13
+    find_tstr = 14
+    split_tstr = 15
 
 
 class GetComparisons(VirtualMachine):
@@ -37,7 +40,9 @@ class GetComparisons(VirtualMachine):
         self.functions = [
             "find of str",
             "split of str",
-            "match of _sre.SRE_Pattern"
+            "match of _sre.SRE_Pattern",
+            "method tstr.find",
+            "method tstr.split"
         ]
 
 
@@ -87,12 +92,26 @@ class GetComparisons(VirtualMachine):
             return []
 
 
+    def byte_IMPORT_NAME(self, name):
+        if name == 'io':
+            super().byte_IMPORT_NAME('myio')
+            r = self.frame.stack[-1]
+            r.__name__ == 'io'
+        elif name == 're':
+            super().byte_IMPORT_NAME('rxpy.re')
+            r = self.frame.stack[-1]
+            r.__name__ == 're'
+        else:
+            super().byte_IMPORT_NAME(name)
+
+
     def byte_COMPARE_OP(self, opnum):
         self.line_already_seen()
         operands = self.topn(2)
         for arg in self.args:
             if ((str(operands[0]) != '') and str(operands[0]) in arg) \
-                    or ((str(operands[1]) != '') and str(operands[1]) in arg):
+                    or ((str(operands[1]) != '') and str(operands[1]) in arg)\
+                    or type(operands[0]) is tstr or type(operands[1]) is tstr:
                 self.trace.append((Operator(opnum), operands))
                 break
 
@@ -118,14 +137,14 @@ class GetComparisons(VirtualMachine):
         return -1
 
 
-    def byte_CALL_FUNCTION(self, arg):
+    def call_function(self, arg, func_args, kwargs):
         self.line_already_seen()
         args = self.topn(arg + 1)
         func_watched = self.function_watched(str(args[0]))
         if func_watched != -1:
             self.trace.append((Functions(Functions.starting_value.value + func_watched + 1), [self.load_from] + args))
 
-        return VirtualMachine.byte_CALL_FUNCTION(self, arg)
+        return VirtualMachine.call_function(self, arg, func_args, kwargs)
 
 
     def byte_LOAD_ATTR(self, attr):
@@ -140,20 +159,20 @@ class GetComparisons(VirtualMachine):
 
     # lets first use a simple approach where strong equality is used for replacement in the first input
     # also we use parts of the rhs of the in statement as substitution
-    def get_next_inputs(self, pos):
+    def get_next_inputs(self, pos, Track):
         next_inputs = list()
         current = self.args[0]
         length_next_inputs = 0
         comparisons = list()
         for t in self.trace:
             if t[0] == Operator.EQ or t[0] == Operator.NE:
-                next_inputs += self.eq_next_inputs(t, current, pos, comparisons)
+                next_inputs += self.eq_next_inputs(t, current, pos, comparisons, Track)
             elif t[0] == Operator.IN or t[0] == Operator.NOT_IN:
-                next_inputs += self.in_next_inputs(t, current, pos, comparisons)
-            elif t[0] == Functions.find_str:
-                next_inputs += self.str_find_next_inputs(t, current, pos, comparisons)
-            elif t[0] == Functions.split_str:
-                next_inputs += self.str_split_next_inputs(t, current, pos, comparisons)
+                next_inputs += self.in_next_inputs(t, current, pos, comparisons, Track)
+            elif t[0] == Functions.find_str or t[0] == Functions.find_tstr:
+                next_inputs += self.str_find_next_inputs(t, current, pos, comparisons, Track)
+            elif t[0] == Functions.split_str or t[0] == Functions.split_tstr:
+                next_inputs += self.str_split_next_inputs(t, current, pos, comparisons, Track)
             elif t[0] == Functions.match_sre:
                 next_inputs += self.match_sre_next_inputs(t, current, pos, comparisons)
 
@@ -182,12 +201,23 @@ class GetComparisons(VirtualMachine):
 
     # apply the substitution for equality comparisons
     # TODO find all occ. in near future
-    def eq_next_inputs(self, trace_line, current, pos, comparisons):
+    def eq_next_inputs(self, trace_line, current, pos, comparisons, Track):
         compare = trace_line[1]
+        next_inputs = list()
+        # if we use taint tracking, use another approach
+        if Track:
+            # check if the position that is currently watched is part of the taint
+            if type(compare[0]) is tstr and compare[0].get_first_mapped_char() + len(compare[0]) >= pos:
+                self.append_new_input(next_inputs, pos, compare[1], current, comparisons)
+            elif type(compare[1]) is tstr and compare[1].get_first_mapped_char() + len(compare[1]) >= pos:
+                self.append_new_input(next_inputs, pos, compare[0], current, comparisons)
+            else:
+                return[]
+            return next_inputs
+
         # verify that both operands are string
         if type(compare[0]) is not str or type(compare[1]) is not str:
             return []
-        next_inputs = list()
         cmp0_str = str(compare[0])
         cmp1_str = str(compare[1])
         if compare[0] == compare[1]:
@@ -200,18 +230,34 @@ class GetComparisons(VirtualMachine):
         if find0 == pos:
             self.append_new_input(next_inputs, pos, cmp1_str, current, comparisons)
         elif find1 == pos:
-            self.append_new_input(next_inputs, pos, cmp1_str, current, comparisons)
+            self.append_new_input(next_inputs, pos, cmp0_str, current, comparisons)
 
         return next_inputs
 
 
     # apply the subsititution for the in statement
-    def in_next_inputs(self, trace_line, current, pos, comparisons):
+    def in_next_inputs(self, trace_line, current, pos, comparisons, Track):
         compare = trace_line[1]
+        next_inputs = list()
+        if Track:
+            # check if the position that is currently watched is part of the taint
+            if type(compare[0]) is tstr and compare[0].get_first_mapped_char() + len(compare[0]) >= pos:
+                counter = 0
+                for cmp in compare[1]:
+                    if compare[0] == cmp:
+                        continue
+                    if counter > self.expand_in:
+                        break
+                    counter += 1
+                    self.append_new_input(next_inputs, pos, cmp, current, comparisons)
+            elif self.check_in_tstr(compare[1], pos, compare[0]):
+                self.append_new_input_non_direct_replace(next_inputs, current, compare[0], pos, comparisons)
+            else:
+                return[]
+            return next_inputs
         # the lhs must be a string
         if type(compare[0]) is not str:
             return []
-        next_inputs = list()
         cmp0_str = str(compare[0])
         counter = 0
         # take some samples from the collection in is applied on
@@ -246,7 +292,13 @@ class GetComparisons(VirtualMachine):
         return type(comp) is str and lhs not in comp \
                 and comp != '' and comp in current and check_char in comp
 
-    def str_split_next_inputs(self, t, current, pos, comparisons):
+    # checks if the lhs is not in comp, comp is a non-empty string which is in current and the check_char must also
+    # be in current for tstr
+    def check_in_tstr(self, comp, pos, lhs):
+        return type(comp) is tstr and lhs not in comp \
+                and str(comp) != '' and comp.get_first_mapped_char() + len(comp) >= pos
+
+    def str_split_next_inputs(self, t, current, pos, comparisons, Track):
         # split is the same as find, but it may have a parameter which defines how many splits should be performed,
         # this does not interest us at the moment
         # TODO in future take the number of splits into account
@@ -254,13 +306,14 @@ class GetComparisons(VirtualMachine):
             t[1][3] = 0
         except:
             pass
-        return self.str_find_next_inputs(t, current, pos, comparisons)
+        return self.str_find_next_inputs(t, current, pos, comparisons, Track)
 
-    def str_find_next_inputs(self, t, current, pos, comparisons):
+    def str_find_next_inputs(self, t, current, pos, comparisons, Track):
         # t[1][2] is the string which is searched for in the input, replace A with this string
         input_string = t[1][2]
         beg = 0
         end = len(t[1][0])
+        next_inputs = list()
         try:
             beg = t[1][3]
             end = t[1][4]
@@ -269,11 +322,17 @@ class GetComparisons(VirtualMachine):
         #search in the string for the value the program is looking for, if it exists, we are done here
         # also if the position to check is not in the string we are searching, we can stop here
         check_char = current[pos]
+        if Track:
+            # check if the position that is currently watched is part of the taint
+            if self.check_in_tstr(t[1][0][beg:end], pos, input_string):
+                next_inputs = self.append_new_input_non_direct_replace(next_inputs, current, input_string, pos, comparisons)
+
+            return next_inputs
+
         if not self.check_in_string(t[1][0][beg:end], current, check_char, input_string):
             return []
         # here we have to handle the input appending ourselves since we have a special case
         # replace the position under observation with the new input string and ...
-        next_inputs = list()
         next_inputs = self.append_new_input_non_direct_replace(next_inputs, current, input_string, pos, comparisons)
         return next_inputs
 

@@ -8,6 +8,7 @@ import queue
 import string
 import random
 import json
+from .tstr import tstr
 
 MaxIter = 3000000
 
@@ -88,10 +89,11 @@ class Node:
 # this is a constant which defines how many parents are checked for an equal comparison chain of the last character
 comparison_equality_chain = 3
 
-def exec_code_object_bfs(code, env, next_input):
+def exec_code_object_bfs(code, env, next_input, Track):
     vm = GetComparisons()
     # I currently assume that the string does only contain one 'A', therefore all existing A's are placed with B's
-    next_input = str(next_input).replace("A","B") + "A"
+    next_input = next_input + "A"
+    # tstr("asd$wer$qwer",2,5).split("$")
     # start with some dummy node, the given substitution has no further effect
     current_Node = Node(None, (0, 0, len(next_input) - 1, 'B', [], 'A'))
     node_list = []
@@ -100,8 +102,6 @@ def exec_code_object_bfs(code, env, next_input):
     with open("outputs.txt","w") as outputs:
         # do not fun infinitely long, in future we might want to add some stopping criterion here
         for i in range(1, MaxIter):
-            # TODO add duplicate pruning
-
             #prepare the VM for running on the given input
             sys.argv[1] = next_input
             # outputs.write(next_input + "\n")
@@ -120,7 +120,7 @@ def exec_code_object_bfs(code, env, next_input):
                 log(e)
 
             # get the next inputs from the VM based on the trace
-            next_inputs = vm.get_next_inputs(current_Node.get_observation_pos())
+            next_inputs = vm.get_next_inputs(current_Node.get_observation_pos(), Track)
 
             # create nodes from the retrieved replacements
             node_list_append = list()

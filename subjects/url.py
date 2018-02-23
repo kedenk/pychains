@@ -254,7 +254,11 @@ class URL:
         return True
 
     def __repr__(self):
-        return str((self.protocol, self.host, self.port, self.file, self.path, self.query, self.ref))
+        try:
+            return ("protocol:%s host:%s port:%s file:%s path:%s query:%s ref:%s" % (
+                repr(self.protocol), repr(self.host), repr(self.port), repr(self.file), repr(self.path), repr(self.query), repr(self.ref)))
+        except Exception as e:
+            return str(e)
 
 class Parts:
     __slots__ = [

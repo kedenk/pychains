@@ -133,13 +133,13 @@ class DFPrefix(Prefix):
         last_char_added = arg_prefix[-1]
         o = h.op
 
-        if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1:
+        if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1 and h.opA.x() == last_char_added.x():
             # Dont add IN and NOT_IN -- '0' in '0123456789' is a common
             # technique in char comparision to check for digits
             # A string comparison rather than a character comparison.
             return (1, EState.String, h)
 
-        elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1:
+        elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1 and h.opA.x() == last_char_added.x():
             # A string comparison rather than a character comparison.
             return (1, EState.String, h)
 
@@ -276,10 +276,11 @@ class DFPrefix(Prefix):
                 return sols
             elif k == EState.Trim:
                 # we need to (1) find where h.opA._idx is within
-                # sys_args, and trim sys_args to that location
-                args = arg_prefix[h.opA.x():]
+                # sys_args, and trim sys_args to that location, and
+                # add a new character.
+                args = arg_prefix[:h.opA.x()] + random.choice(All_Characters)
                 # we already know the result for next character
-                fix =  [arg_prefix[h.opA.x()+1]]
+                fix =  [arg_prefix[h.opA.x()]]
                 sols = [self.create_prefix(args, fix)]
                 return sols # VERIFY - TODO
 
@@ -320,7 +321,10 @@ class Chain:
         self._my_args = []
 
     def add_sys_args(self, var):
-        if type(var) is not tainted.tstr: var = create_arg(var)
+        if type(var) is not tainted.tstr:
+            var = create_arg(var)
+        else:
+            var = create_arg(str(var))
         self._my_args.append(var)
 
     def sys_args(self):

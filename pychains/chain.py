@@ -506,10 +506,12 @@ class BFSPrefix(Prefix):
         next_inputs = []
         opA, opB = trace_line.opA, trace_line.opB
         # check if the position that is currently watched is part of the taint
+        # note that checking opA is sufficient, assuming that only one of opA
+        # and opB are tstr, and the other is a str. By python's datamodel, the
+        # __eq__ are called on the subclass's object irrespective of whether it
+        # is in left or right.
         if type(opA) is tstr and opA.is_tpos_contained(pos):
             next_inputs.extend(self._new_inputs(pos, opB, current, comparisons))
-        elif type(opB) is tstr and opB.is_tpos_contained(pos):
-            next_inputs.extend(self._new_inputs(pos, opA, current, comparisons))
         else:
             return []
         return next_inputs
@@ -517,9 +519,11 @@ class BFSPrefix(Prefix):
     # apply the subsititution for the in statement
     def _in_next_inputs(self, trace_line, current, pos, comparisons):
         compare = trace_line[1]
+        if not type(compare[0]) is tstr: return []
+
         next_inputs = []
         # check if the position that is currently watched is part of taint
-        if type(compare[0]) is tstr and compare[0].is_tpos_contained(pos):
+        if  compare[0].is_tpos_contained(pos):
             counter = 0
             for cmp in compare[1]:
                 if compare[0] == cmp:
@@ -528,7 +532,7 @@ class BFSPrefix(Prefix):
                     break
                 counter += 1
                 next_inputs.extend(self._new_inputs(pos, cmp, current, comparisons))
-        elif type(compare[1]) is tstr and self._check_in_tstr(compare[1], pos, compare[0]):
+        elif self._check_in_tstr(compare[1], pos, compare[0]):
             next_inputs.extend(self._new_inputs_non_direct_replace(current, compare[0], pos, comparisons))
         else:
             return []

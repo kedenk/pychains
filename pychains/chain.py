@@ -503,40 +503,31 @@ class BFSPrefix(Prefix):
     # TODO find all occ. in near future
     # pos is the position being observed.
     def _eq_next_inputs(self, trace_line, current, pos, comparisons):
-        next_inputs = []
         opA, opB = trace_line.opA, trace_line.opB
+        if not type(opA) is tstr: return []
         # check if the position that is currently watched is part of the taint
         # note that checking opA is sufficient, assuming that only one of opA
         # and opB are tstr, and the other is a str. By python's datamodel, the
         # __eq__ are called on the subclass's object irrespective of whether it
         # is in left or right.
-        if type(opA) is tstr and opA.is_tpos_contained(pos):
-            next_inputs.extend(self._new_inputs(pos, opB, current, comparisons))
+        if opA.is_tpos_contained(pos):
+            return self._new_inputs(pos, opB, current, comparisons)
         else:
             return []
-        return next_inputs
 
     # apply the subsititution for the in statement
     def _in_next_inputs(self, trace_line, current, pos, comparisons):
         compare = trace_line[1]
         if not type(compare[0]) is tstr: return []
 
-        next_inputs = []
         # check if the position that is currently watched is part of taint
-        if  compare[0].is_tpos_contained(pos):
-            counter = 0
-            for cmp in compare[1]:
-                if compare[0] == cmp:
-                    continue
-                if counter > self._expand_in:
-                    break
-                counter += 1
-                next_inputs.extend(self._new_inputs(pos, cmp, current, comparisons))
+        if compare[0].is_tpos_contained(pos):
+            lst = [c for c in compare[1] if c != compare[0]]
+            return [self._new_inputs(pos, c, current, comparisons) for c in lst]
         elif self._check_in_tstr(compare[1], pos, compare[0]):
-            next_inputs.extend(self._new_inputs_non_direct_replace(current, compare[0], pos, comparisons))
+            return [self._new_inputs_non_direct_replace(current, compare[0], pos, comparisons)]
         else:
             return []
-        return next_inputs
 
     # checks if the lhs is not in comp, comp is a non-empty string which is in
     # current and the check_char must also be in current for tstr

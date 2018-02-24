@@ -517,15 +517,15 @@ class BFSPrefix(Prefix):
 
     # apply the subsititution for the in statement
     def _in_next_inputs(self, trace_line, current, pos, comparisons):
-        compare = trace_line[1]
-        if not type(compare[0]) is tstr: return []
+        opA, opB = trace_line.opA, trace_line.opB
+        if not type(opA) is tstr: return []
 
         # check if the position that is currently watched is part of taint
-        if compare[0].is_tpos_contained(pos):
-            lst = [c for c in compare[1] if c != compare[0]]
+        if opA.is_tpos_contained(pos):
+            lst = [c for c in opB if c != opA]
             return [self._new_inputs(pos, c, current, comparisons) for c in lst]
-        elif self._check_in_tstr(compare[1], pos, compare[0]):
-            return [self._new_inputs_non_direct_replace(current, compare[0], pos, comparisons)]
+        elif self._check_in_tstr(opB, pos, opB):
+            return [self._new_inputs_non_direct_replace(current, opA, pos, comparisons)]
         else:
             return []
 

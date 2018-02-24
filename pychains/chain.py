@@ -384,7 +384,7 @@ class BFSPrefix(Prefix):
         for node in solutions:
             if self._prune_input(node):
                 solutions.remove(node)
-            elif self._check_seen(BFSPrefix.already_seen, node):
+            elif self._check_seen(node):
                 solutions.remove(node)
         return solutions
 
@@ -424,7 +424,7 @@ class BFSPrefix(Prefix):
     # at this point
     def _check_seen(self, already_seen, node):
         s = node.get_next_input(*node.change)
-        if s in already_seen:
+        if s in BFSPrefix.already_seen:
             return True
         already_seen.add(node.get_next_input(*node.change))
 

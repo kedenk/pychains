@@ -609,16 +609,18 @@ class BFSPrefix(Prefix):
             # concretely we check if the rhs is a substring of the current
             # input, if yes we are looking for something in the # current input
             check_char = current[pos]
-            if not next_inputs and self._check_in_string(compare[1], current, check_char, cmp0_str):
-                next_inputs.extend(self._new_inputs_non_direct_replace(current, cmp0_str, pos, comparisons))
-
-            return next_inputs
+            if next_inputs:
+                return next_inputs
+            if type(comp) is str and self._check_in_string(compare[1], current, check_char, cmp0_str):
+                return [self._new_inputs_non_direct_replace(current, cmp0_str, pos, comparisons)]
+            return []
 
     # checks if the lhs is not in comp, comp is a non-empty string which is in
     # current and the check_char must also be in current
     def _check_in_string(self, comp, current, check_char, lhs):
-        return type(comp) is str and lhs not in comp \
-               and comp != '' and comp in current and check_char in comp
+        if not comp: return False
+        if lhs in comp: return False
+        return comp in current and check_char in comp
 
     # checks if the lhs is not in comp, comp is a non-empty string which is in
     # current and the check_char must also be in current for tstr
@@ -655,21 +657,21 @@ class BFSPrefix(Prefix):
         # exists, we are done here. also if the position to check is not in the
         # string we are searching, we can stop here
         check_char = current[pos]
+        comp = t[1][0][beg:end]
         if Track:
             # check if the position that is currently watched is part of the taint
-            comp = t[1][0][beg:end]
             if type(comp) is tstr and self._check_in_tstr(comp, pos, input_string):
                 next_inputs.extend(self._new_inputs_non_direct_replace(current, input_string, pos, comparisons))
-
             return next_inputs
 
-        if not self._check_in_string(t[1][0][beg:end], current, check_char, input_string):
-            return []
-        # here we have to handle the input appending ourselves since we have a
-        # special case replace the position under observation with the new input
-        # string and ...
-        next_inputs.extend(self._new_inputs_non_direct_replace(current, input_string, pos, comparisons))
-        return next_inputs
+        else:
+            # here we have to handle the input appending ourselves since we have a
+            # special case replace the position under observation with the new input
+            # string and ...
+            if type(comp) is str  and self._check_in_string(comp, current, check_char, input_string):
+                return [self._new_inputs_non_direct_replace(current, input_string, pos, comparisons)]
+            else:
+                return []
 
     # instead of replacing the char under naively, we replace the char and
     # either look at the positions specified below

@@ -330,23 +330,31 @@ class BFSPrefix(Prefix):
     #       production of this Node)
     # parentstring is the string which caused the generation of this specific
     #       node
-    def __init__(self, prefix = None, parent = None, change = (0, 0, "A", [], None)):
-        if prefix != None:
-            last_idx = len(prefix.my_arg) - 1
-            change_pos = last_idx
-            obs_pos = last_idx
-            comparisons = []
-            input_str = prefix.my_arg
-            rep_str = prefix.my_arg[-1]
-            self.change = (change_pos, obs_pos, rep_str, comparisons, input_str)
-            self.my_arg = self.get_substituted_string(*self.change)
-        else:
-            self.change = change
-            self.my_arg = self.get_next_input(*self.change)
-        # defines the observation position for this prefix
-        self.parent = parent
-        self.parentstring = change[4]
+    def __init__(self, prefix, fixes=[]):
+        self.change = self.create_change_from_prefix(prefix)
+        self.my_arg = self.change[4]
         self.obs_pos = self.change[1]
+        # defines the observation position for this prefix
+        self.parent = prefix
+        self.parentstring = self.change[4]
+
+    def apply_change(self, change):
+        self.change = change
+        self.obs_pos = self.change[1]
+        next_input = self.get_substituted_string(*self.change)
+        self.my_arg = next_input[:self.obs_pos] + "A" + next_input[self.obs_pos:]
+        # defines the observation position for this prefix
+        self.parentstring = self.change[4]
+        return self
+
+    def create_change_from_prefix(self, prefix):
+        last_idx = len(prefix.my_arg) - 1
+        change_pos = last_idx
+        obs_pos = last_idx
+        comparisons = []
+        input_str = prefix.my_arg
+        rep_str = prefix.my_arg[-1]
+        return (change_pos, obs_pos, rep_str, comparisons, input_str)
 
     # replaces at changepos the char with the given replacement in the
     # parentstring
@@ -363,8 +371,10 @@ class BFSPrefix(Prefix):
     def get_comparisons(self):
         return self.change[3]
 
-    def create_prefix(self, myarg, fixes=[]):
-        return BFSPrefix(myarg, fixes)
+    def create_prefix(self, my_arg, fixes=[]):
+        b = BFSPrefix(self)
+        b.my_arg = my_arg
+        return b
 
     # Input pruning
     def prune(self, solutions, fn):
@@ -467,7 +477,7 @@ class BFSPrefix(Prefix):
         # now make the list of tuples a list of prefixes
         prefix_list = []
         for c in next_inputs:
-            prefix_list.append(BFSPrefix(prefix=None, change=c, parent=self))
+            prefix_list.append(BFSPrefix(self).apply_change(c))
         return prefix_list
 
     # appends a new input based on the current checking position, the subst. and
@@ -614,11 +624,15 @@ class Chain:
                 solution_stack += self.current_prefix.prune(solutions, fn)
 
                 if not solution_stack:
-                    # remove one character and try again.
-                    new_arg = self.sys_args()[:-1]
-                    if not new_arg:
+                    if type(self.current_prefix) is not BFSPrefix:
+                        # remove one character and try again.
+                        new_arg = self.sys_args()[:-1]
+                        if not new_arg:
+                            raise Exception('No suitable continuation found')
+                        solution_stack = [self.current_prefix.create_prefix(new_arg)]
+                    else:
                         raise Exception('No suitable continuation found')
-                    solution_stack = [self.current_prefix.create_prefix(new_arg)]
+
 
 if __name__ == '__main__':
     import imp

@@ -319,46 +319,46 @@ class BFSPrefix(Prefix):
     already_seen = set()
 
     # parent is an object of class BFSPrefix
-    # change is a tuple of a position and a string. This tuple is used to determine a substitution
+    # change is a tuple of a position and a string. This tuple is used to
+    # determine a substitution
     # the tuple looks like
-    #   (heuristic value,
-    #   change_position,
+    #   (change_position,
     #   position for new observation,
     #   string used for replacement,
     #   list of comparisons made on the char under observation,
-    #   string that was used as input for the parent which lead to the production of this Node)
-    # parentstring is the string which caused the generation of this specific node
-    def __init__(self, prefix = None, parent = None, change = (0, 0, 0, "A", [], None)):
+    #   string that was used as input for the parent which lead to the
+    #       production of this Node)
+    # parentstring is the string which caused the generation of this specific
+    #       node
+    def __init__(self, prefix = None, parent = None, change = (0, 0, "A", [], None)):
         self.children = []
         self.parent = parent
         self.change = change
-        self.parentstring = change[5]
+        self.parentstring = change[4]
         self.causes_crash = True
         if prefix != None:
-            self.change = (0, len(prefix.my_arg) - 1, len(prefix.my_arg) - 1, prefix.my_arg[-1], [], prefix.my_arg)
-            self.parentstring = self.change[5]
+            self.change = (len(prefix.my_arg) - 1, len(prefix.my_arg) - 1, prefix.my_arg[-1], [], prefix.my_arg)
+            self.parentstring = self.change[4]
             self.my_arg = self.get_substituted_string()
         else:
             self.my_arg = self.get_next_input()
         # defines the observation position for this prefix
-        self.obs_pos = self.change[2]
-        pass
+        self.obs_pos = self.change[1]
 
     # replaces at changepos the char with the given replacement in the
-    # parentstring the heursitic value is currently not used but might be in
-    # future
+    # parentstring
     def get_substituted_string(self):
-        return self.parentstring[0:self.change[1]] + self.change[3] + self.parentstring[self.change[1] + 1:]
+        return self.parentstring[0:self.change[0]] + self.change[2] + self.parentstring[self.change[0] + 1:]
 
     # returns a new input by substituting the change position and adding a new
     # char at the next position that should be observed
     def get_next_input(self):
         next_input = self.get_substituted_string()
-        return next_input[:self.change[2]] + "A" + next_input[self.change[2]:]
+        return next_input[:self.change[1]] + "A" + next_input[self.change[1]:]
 
     # returns the comparisons made on the position that is substituted
     def get_comparisons(self):
-        return self.change[4]
+        return self.change[3]
 
     def create_prefix(self, myarg, fixes=[]):
         return BFSPrefix(myarg, fixes)
@@ -486,7 +486,7 @@ class BFSPrefix(Prefix):
         # position under observation did not have a comparison, so we do also
         # not add a "B", because the prefix is likely already completely wrong
         if next_inputs:
-            next_inputs += [(0, self.obs_pos, self.obs_pos + 1, "B", comparisons, current)]
+            next_inputs += [(self.obs_pos, self.obs_pos + 1, "B", comparisons, current)]
 
         # now make the list of tuples a list of prefixes
         prefix_list = []
@@ -499,14 +499,14 @@ class BFSPrefix(Prefix):
     # directly behind the substituted position
     def _new_inputs(self, pos, subst, current, comparisons):
         inputs = []
-        inputs.append((0, pos, pos + len(subst), subst, comparisons, current))
+        inputs.append((pos, pos + len(subst), subst, comparisons, current))
         # if the character under observation lies in the middle of the string,
         # it might be that we fulfilled the constraint and should now start with
         # appending stuff to the string again (new string will have length of
         # current plus length of the substitution minus 1 since the position
         # under observation is substituted)
         if pos < len(current) - 1:
-            inputs.append((0, pos, len(current) + len(subst) - 1, subst, comparisons, current))
+            inputs.append((pos, len(current) + len(subst) - 1, subst, comparisons, current))
         return inputs
 
     # Look for an comparisons on a given index (pos).
@@ -537,7 +537,6 @@ class BFSPrefix(Prefix):
             if compare[0] == compare[1]:
                 return []
 
-            # self.changed.add(str(trace_line))
             find0 = current.find(cmp0_str)
             find1 = current.find(cmp1_str)
             # check if actually the char at the pos we are currently checking
@@ -667,15 +666,15 @@ class BFSPrefix(Prefix):
     def _new_inputs_non_direct_replace(self, current, input_string, pos, comparisons):
         inputs = []
         # set the next position behind what we just replaced
-        inputs.append((0, pos, pos + len(input_string), input_string, comparisons, current))
+        inputs.append((pos, pos + len(input_string), input_string, comparisons, current))
         # set the next position in front of what we just replaced
-        inputs.append((0, pos, pos, input_string, comparisons, current))
+        inputs.append((pos, pos, input_string, comparisons, current))
         # set the next position at the end of the string, s.t. if we satisfied
         # something, we can restart appending
         # it may be that the replacement we did beforehand already sets the next
         # pos to the end, then we do not need to add a new position here
         if (pos + len(input_string) != len(current)):
-            inputs.append((0, pos, len(current), input_string, comparisons, current))
+            inputs.append((pos, len(current), input_string, comparisons, current))
         return inputs
 
 class Chain:

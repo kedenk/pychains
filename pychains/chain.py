@@ -331,11 +331,9 @@ class BFSPrefix(Prefix):
     # parentstring is the string which caused the generation of this specific
     #       node
     def __init__(self, prefix = None, parent = None, change = (0, 0, "A", [], None)):
-        self.children = []
         self.parent = parent
         self.change = change
         self.parentstring = change[4]
-        self.causes_crash = True
         if prefix != None:
             self.change = (len(prefix.my_arg) - 1, len(prefix.my_arg) - 1, prefix.my_arg[-1], [], prefix.my_arg)
             self.parentstring = self.change[4]
@@ -448,8 +446,6 @@ class BFSPrefix(Prefix):
             fn(str(next_input))
         except Exception as e:
             return True
-
-        node.causes_crash = False
         return False
 
     # Comparison filtering and new BFS_Prefix generation

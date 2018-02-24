@@ -523,9 +523,10 @@ class BFSPrefix(Prefix):
         # check if the position that is currently watched is part of taint
         if opA.is_tpos_contained(pos):
             lst = [c for c in opB if c != opA]
-            return [self._new_inputs(pos, c, current, comparisons) for c in lst]
+            new_vals = [self._new_inputs(pos, c, current, comparisons) for c in lst]
+            return [j for i in new_vals for j in i] # flatten one level
         elif self._check_in_tstr(opB, pos, opB):
-            return [self._new_inputs_non_direct_replace(current, opA, pos, comparisons)]
+            return self._new_inputs_non_direct_replace(current, opA, pos, comparisons)
         else:
             return []
 

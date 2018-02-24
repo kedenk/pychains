@@ -390,7 +390,7 @@ class Chain:
                     new_arg = self.sys_args()[:-1]
                     if not new_arg:
                         raise Exception('No suitable continuation found')
-                    solution_stack = [p.create_prefix(new_arg)]
+                    solution_stack = [self.current_prefix.create_prefix(new_arg)]
 
 
 class BFSPrefix(Prefix):

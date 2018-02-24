@@ -344,10 +344,8 @@ class BFSPrefix(Prefix):
     already_seen = set()
 
     # parent is an object of class BFSPrefix
-    # change is a tuple of a position and a string. This tuple is used to
-    # determine a substitution
-    # parentstring is the string which caused the generation of this specific
-    #       node
+    # change is is used to determine a substitution
+    #  node
     def __init__(self, prefix, fixes=[]):
         c = self.create_change_from_prefix(prefix)
         self.change = c
@@ -355,7 +353,6 @@ class BFSPrefix(Prefix):
         self.obs_pos = c.obs_pos
         # defines the observation position for this prefix
         self.parent = prefix
-        self.parentstring = c.input_str
         self.comparisons = c.comparisons
 
     def apply_change(self, c):
@@ -363,7 +360,6 @@ class BFSPrefix(Prefix):
         self.obs_pos = c.obs_pos
         self.my_arg = c.get_next_input()
         # defines the observation position for this prefix
-        self.parentstring = c.input_str
         self.comparisons = c.comparisons
         return self
 
@@ -412,7 +408,7 @@ class BFSPrefix(Prefix):
     def _comparison_chain_equal(self, node):
         global Comparison_Equality_Chain
         initial_trace = node.comparisons
-        for i_eq in range(0, Comparison_Equality_Chain):
+        for _ in range(Comparison_Equality_Chain):
             if not node.parent: return False
             node = node.parent
             cmp_trace = node.comparisons
@@ -427,8 +423,7 @@ class BFSPrefix(Prefix):
     # at this point
     def _check_seen(self, node):
         s = node.change.get_next_input()
-        if s in BFSPrefix.already_seen:
-            return True
+        if s in BFSPrefix.already_seen: return True
         BFSPrefix.already_seen.add(node.change.get_next_input())
 
     # Comparison filtering and new BFS_Prefix generation

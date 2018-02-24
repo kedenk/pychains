@@ -356,12 +356,14 @@ class BFSPrefix(Prefix):
     def child_exists(self):
         return self.children
 
-    # replaces at changepos the char with the given replacement in the parentstring
-    # the heursitic value is currently not used but might be in future
+    # replaces at changepos the char with the given replacement in the
+    # parentstring the heursitic value is currently not used but might be in
+    # future
     def get_substituted_string(self):
         return self.parentstring[0:self.change[1]] + self.change[3] + self.parentstring[self.change[1] + 1:]
 
-    # returns a new input by substituting the change position and adding a new char at the next position that should be observed
+    # returns a new input by substituting the change position and adding a new
+    # char at the next position that should be observed
     def get_next_input(self):
         next_input = self.get_substituted_string()
         return next_input[:self.change[2]] + "A" + next_input[self.change[2]:]
@@ -385,11 +387,11 @@ class BFSPrefix(Prefix):
     def create_prefix(self, myarg, fixes=[]):
         return BFSPrefix(myarg, fixes)
 
-    ################# Input pruning ###############################################
-    # implement a better prune
+    # Input pruning
     def prune(self, solutions, fn):
-        # filter for inputs, that do not lead to success, i.e. inputs that are already correct and inputs that
-        # can be pruned in another form (see prune_input for more information)
+        # filter for inputs, that do not lead to success, i.e. inputs that are
+        # already correct and inputs that can be pruned in another form (see
+        # prune_input for more information)
         for node in list(solutions):
             if self._prune_input(node):
                 solutions.remove(node)
@@ -397,8 +399,7 @@ class BFSPrefix(Prefix):
                 solutions.remove(node)
             elif not self._check_exception(node, fn):
                 solutions.remove(node)
-                # we are dune. Just return.
-                #return [BFSPrefix(prefix=None, change=node.get_substituted_string(), parent=self)]
+                # we are done. Just return.
                 node.my_arg = node.my_arg[0:-1]
                 return [BFSPrefix(node)]
         return solutions
@@ -408,8 +409,8 @@ class BFSPrefix(Prefix):
     # it ends with a value which was not successful for a small input
     def _prune_input(self, node):
         s = node.get_substituted_string()
-        # we do not need to create arbitrarily long strings, such a thing will likely end in an infinite
-        # string, so we prune branches starting here
+        # we do not need to create arbitrarily long strings, such a thing will
+        # likely end in an infinite string, so we prune branches starting here
         if "BBBA" in node.get_next_input():
             return True
         if len(s) <= 3:
@@ -421,7 +422,8 @@ class BFSPrefix(Prefix):
             return True
         return False
 
-    # TODO this can be done just on the parent instead of checking for all children
+    # TODO this can be done just on the parent instead of checking for all
+    # children
     def _comparison_chain_equal(self, node):
         global Comparison_Equality_Chain
         initial_trace = node.get_comparisons()
@@ -441,25 +443,30 @@ class BFSPrefix(Prefix):
                         return False
         return True
 
-    # checks if two predicates are equal for some special cases like in or special function calls
+    # checks if two predicates are equal for some special cases like in or
+    # special function calls
     def _compare_predicates_in_detail(self, cmp, init):
         if cmp.op == init.op:
-            # for split and find on string check if the value to look for is the same, if yes return true
+            # for split and find on string check if the value to look for is the
+            # same, if yes return true
             if cmp.op in [Op.SPLIT_STR, Op.FIND_STR]:
                 return cmp.opA[-1] == cmp.opA[-1]
             if cmp.op in [Op.IN, Op.NOT_IN]:
                 return False
         return False
 
-    # check if the input is already in the queue, if yes one can just prune it at this point
+    # check if the input is already in the queue, if yes one can just prune it
+    # at this point
     def _check_seen(self, already_seen, node):
         s = node.get_next_input()
         if s in already_seen:
             return True
         already_seen.add(node.get_next_input())
 
-    # check if an input causes a crash, if not it is likely successful and can be reported
-    # TODO this is currently quite inefficient, since we run the prog on each input twice, should be changed in future
+    # check if an input causes a crash, if not it is likely successful and can
+    # be reported
+    # TODO this is currently quite inefficient, since we run the prog on each
+    # input twice, should be changed in future
     def _check_exception(self, node, fn):
         next_input = node.get_substituted_string()
 
@@ -473,8 +480,9 @@ class BFSPrefix(Prefix):
 
     # Comparison filtering and new BFS_Prefix generation
 
-    # lets first use a simple approach where strong equality is used for replacement in the first input
-    # also we use parts of the rhs of the in statement as substitution
+    # lets first use a simple approach where strong equality is used for
+    # replacement in the first input also we use parts of the rhs of the
+    # in statement as substitution
     def solve(self, my_traces, i):
         # for now
         next_inputs = []
@@ -498,8 +506,9 @@ class BFSPrefix(Prefix):
                 comparisons.append(t)
 
         # add some letter as substitution as well
-        # if nothing else was added, this means, that the character at the position under observation did not have a
-        # comparison, so we do also not add a "B", because the prefix is likely already completely wrong
+        # if nothing else was added, this means, that the character at the
+        # position under observation did not have a comparison, so we do also
+        # not add a "B", because the prefix is likely already completely wrong
         if next_inputs:
             next_inputs += [(0, self.obs_pos, self.obs_pos + 1, "B", comparisons, current)]
 
@@ -509,14 +518,17 @@ class BFSPrefix(Prefix):
             prefix_list.append(BFSPrefix(prefix=None, change=input, parent=self))
         return prefix_list
 
-    # appends a new input based on the current checking position, the subst. and the value which was used for the run
-    # the next position to observe will lie directly behind the substituted position
+    # appends a new input based on the current checking position, the subst. and
+    # the value which was used for the run the next position to observe will lie
+    # directly behind the substituted position
     def _new_inputs(self, pos, subst, current, comparisons):
         inputs = []
         inputs.append((0, pos, pos + len(subst), subst, comparisons, current))
-        # if the character under observation lies in the middle of the string, it might be that we fulfilled the
-        # constraint and should now start with appending stuff to the string again (new string will have length of
-        # current plus length of the substitution minus 1 since the position under observation is substituted)
+        # if the character under observation lies in the middle of the string,
+        # it might be that we fulfilled the constraint and should now start with
+        # appending stuff to the string again (new string will have length of
+        # current plus length of the substitution minus 1 since the position
+        # under observation is substituted)
         if pos < len(current) - 1:
             inputs.append((0, pos, len(current) + len(subst) - 1, subst, comparisons, current))
         return inputs
@@ -552,7 +564,8 @@ class BFSPrefix(Prefix):
             # self.changed.add(str(trace_line))
             find0 = current.find(cmp0_str)
             find1 = current.find(cmp1_str)
-            # check if actually the char at the pos we are currently checking was checked in the comparison
+            # check if actually the char at the pos we are currently checking
+            # was checked in the comparison
             if find0 == pos:
                 next_inputs.extend(self._new_inputs(pos, cmp1_str, current, comparisons))
             elif find1 == pos:
@@ -576,7 +589,7 @@ class BFSPrefix(Prefix):
                     counter += 1
                     next_inputs.extend(self._new_inputs(pos, cmp, current, comparisons))
             elif type(compare[1]) is tstr and self._check_in_tstr(compare[1], pos, compare[0]):
-                next_inputs.extend(self._new_inputs_non_direct_replace(next_inputs, current, compare[0], pos, comparisons))
+                next_inputs.extend(self._new_inputs_non_direct_replace(current, compare[0], pos, comparisons))
             else:
                 return []
             return next_inputs

@@ -393,16 +393,14 @@ class BFSPrefix(Prefix):
         for node in list(solutions):
             if self._prune_input(node):
                 solutions.remove(node)
-                continue
-            if self._check_seen(BFSPrefix.already_seen, node):
+            elif self._check_seen(BFSPrefix.already_seen, node):
                 solutions.remove(node)
-                continue
-            if not self._check_exception(node, fn):
+            elif not self._check_exception(node, fn):
                 solutions.remove(node)
-
-                # this is very hacky, check how to stop when string in node does not cause a crash
-                log("Arg: " + repr(node.get_substituted_string()))
-                sys.exit(0)
+                # we are dune. Just return.
+                #return [BFSPrefix(prefix=None, change=node.get_substituted_string(), parent=self)]
+                node.my_arg = node.my_arg[0:-1]
+                return [BFSPrefix(node)]
         return solutions
 
 

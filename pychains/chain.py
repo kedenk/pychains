@@ -315,6 +315,13 @@ class DFPrefix(Prefix):
         return []
 
 class Change:
+    # the class looks like
+    #   change_position,
+    #   position for new observation,
+    #   string used for replacement,
+    #   list of comparisons made on the char under observation,
+    #   string that was used as input for the parent which lead to the
+    #       production of this Node)
     def __init__(self, change_pos, obs_pos, rep_str, comparisons, input_str):
         self.__dict__.update(locals())
         del self.__dict__['self']
@@ -339,13 +346,6 @@ class BFSPrefix(Prefix):
     # parent is an object of class BFSPrefix
     # change is a tuple of a position and a string. This tuple is used to
     # determine a substitution
-    # the tuple looks like
-    #   (change_position,
-    #   position for new observation,
-    #   string used for replacement,
-    #   list of comparisons made on the char under observation,
-    #   string that was used as input for the parent which lead to the
-    #       production of this Node)
     # parentstring is the string which caused the generation of this specific
     #       node
     def __init__(self, prefix, fixes=[]):
@@ -438,22 +438,19 @@ class BFSPrefix(Prefix):
     def solve(self, my_traces, i):
         # for now
         next_inputs = []
-        comparisons = []
         only_tainted = [t for t in my_traces if type(t.opA) is tstr and t.opA.is_tpos_contained(self.obs_pos)]
-        only_comparisons = [t for t in only_tainted if t.op in CmpSet]
-        for t in only_comparisons:
+        comparisons = [t for t in only_tainted if t.op in CmpSet]
+        for t in comparisons:
             opB = [t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
-            inp = self._next_inputs(t.opA, t.opB, comparisons)
-            next_inputs.extend(inp)
-            comparisons.append(t)
+            next_inputs.extend(self._next_inputs(t.opA, t.opB, comparisons))
 
         # add some letter as substitution as well
         # if nothing else was added, this means, that the character at the
         # position under observation did not have a comparison, so we do also
         # not add a "B", because the prefix is likely already completely wrong
-        if next_inputs:
-            next_inputs.append(Change(self.obs_pos, self.obs_pos + 1, "B", comparisons, self.my_arg))
+        if not next_inputs: return []
 
+        next_inputs.append(Change(self.obs_pos, self.obs_pos + 1, "B", comparisons, self.my_arg))
         # now make the list of tuples a list of prefixes
         return [BFSPrefix(self).apply_change(c) for c in next_inputs]
 

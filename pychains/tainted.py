@@ -116,6 +116,19 @@ class tstr(str):
         return super().find(sub, start, end)
 
 
+    # tpos is the index in the input string that we are
+    # looking to see if contained in this string.
+    def is_tpos_contained(self, tpos):
+        tainted_len = len(self) - self._unmapped_till
+        if self._idx <= tpos < self._idx + tainted_len: return True
+        return False
+
+    # idx is the string index of current string.
+    def is_idx_tainted(self, idx):
+        if idx < self._unmapped_till: return False
+        if idx > len(self): return False
+        return True
+
     def get_mapped_char_idx(self, i):
         # if the current string is not mapped to input till
         # char 10 (_unmapped_till), but the

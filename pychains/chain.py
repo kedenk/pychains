@@ -331,9 +331,6 @@ class BFSPrefix(Prefix):
     # parentstring is the string which caused the generation of this specific
     #       node
     def __init__(self, prefix = None, parent = None, change = (0, 0, "A", [], None)):
-        self.parent = parent
-        self.change = change
-        self.parentstring = change[4]
         if prefix != None:
             last_idx = len(prefix.my_arg) - 1
             change_pos = last_idx
@@ -342,17 +339,19 @@ class BFSPrefix(Prefix):
             input_str = prefix.my_arg
             rep_str = prefix.my_arg[-1]
             self.change = (change_pos, obs_pos, rep_str, comparisons, input_str)
-            self.parentstring = self.change[4]
             self.my_arg = self.get_substituted_string(*self.change)
         else:
+            self.change = change
             self.my_arg = self.get_next_input(*self.change)
         # defines the observation position for this prefix
+        self.parent = parent
+        self.parentstring = change[4]
         self.obs_pos = self.change[1]
 
     # replaces at changepos the char with the given replacement in the
     # parentstring
     def get_substituted_string(self, change_pos, obs_pos, rep_str, comparisons, input_str):
-        return self.parentstring[0:change_pos] + rep_str + self.parentstring[change_pos + 1:]
+        return input_str[0:change_pos] + rep_str + input_str[change_pos + 1:]
 
     # returns a new input by substituting the change position and adding a new
     # char at the next position that should be observed

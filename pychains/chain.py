@@ -452,7 +452,7 @@ class BFSPrefix(Prefix):
         # position under observation did not have a comparison, so we do also
         # not add a "B", because the prefix is likely already completely wrong
         if next_inputs:
-            next_inputs += [Change(self.obs_pos, self.obs_pos + 1, "B", comparisons, self.my_arg)]
+            next_inputs.append(Change(self.obs_pos, self.obs_pos + 1, "B", comparisons, self.my_arg))
 
         # now make the list of tuples a list of prefixes
         return [BFSPrefix(self).apply_change(c) for c in next_inputs]
@@ -471,15 +471,7 @@ class BFSPrefix(Prefix):
             inputs.append(Change(pos, len(current) + len(subst) - 1, subst, comparisons, current))
         return inputs
 
-    # Look for an comparisons on a given index (pos).
-    # apply the substitution for equality comparisons
-    # current is the current argument
-    # TODO find all occ. in near future
-    # pos is the position being observed.
-    # apply the subsititution for the in statement
     def _next_inputs(self, opA, opB, comparisons):
-        # check if the position that is currently watched is part of taint
-        # this is equivalent to opA.x() == pos when opA is a single char
         new_vals = [self._new_inputs(self.obs_pos, c, self.my_arg, comparisons) for c in opB]
         return [j for i in new_vals for j in i] # flatten one level
 

@@ -344,18 +344,6 @@ class BFSPrefix(Prefix):
         self.obs_pos = self.change[2]
         pass
 
-    # gets a list of children to add to this node
-    def addChildren(self, children):
-        self.children += children
-
-    # returns the next child in list and removes this object from the list
-    def get_next_child(self):
-        return self.children.pop(0)
-
-    # checks if there are still children in the list
-    def child_exists(self):
-        return self.children
-
     # replaces at changepos the char with the given replacement in the
     # parentstring the heursitic value is currently not used but might be in
     # future
@@ -368,21 +356,9 @@ class BFSPrefix(Prefix):
         next_input = self.get_substituted_string()
         return next_input[:self.change[2]] + "A" + next_input[self.change[2]:]
 
-    # returns the position of the character under observation
-    def get_observation_pos(self):
-        return self.change[2]
-
-    # returns the position that is substituted
-    def get_subst_pos(self):
-        return self.change[1]
-
     # returns the comparisons made on the position that is substituted
     def get_comparisons(self):
         return self.change[4]
-
-    # returns the string that is used for the substitution
-    def get_string_of_subsitution(self):
-        return self.change[3]
 
     def create_prefix(self, myarg, fixes=[]):
         return BFSPrefix(myarg, fixes)

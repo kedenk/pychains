@@ -567,8 +567,8 @@ class BFSPrefix(Prefix):
         compare = trace_line[1]
         next_inputs = []
         if Track:
-            # check if the position that is currently watched is part of the taint
-            if type(compare[0]) is tstr and compare[0].get_first_mapped_char() + len(compare[0]) >= pos:
+            # check if the position that is currently watched is part of taint
+            if type(compare[0]) is tstr and compare[0].is_tpos_contained(pos):
                 counter = 0
                 for cmp in compare[1]:
                     if compare[0] == cmp:
@@ -577,7 +577,7 @@ class BFSPrefix(Prefix):
                         break
                     counter += 1
                     next_inputs.extend(self._new_inputs(pos, cmp, current, comparisons))
-            elif self._check_in_tstr(compare[1], pos, compare[0]):
+            elif type(compare[1]) is tstr and self._check_in_tstr(compare[1], pos, compare[0]):
                 next_inputs.extend(self._new_inputs_non_direct_replace(next_inputs, current, compare[0], pos, comparisons))
             else:
                 return []
@@ -590,8 +590,9 @@ class BFSPrefix(Prefix):
             counter = 0
             # take some samples from the collection in is applied on
             for cmp in compare[1]:
-                # only take a subset of the rhs (the collection in is applied on)
-                # TODO in some cases it is important to take the whole content of a collection into account
+                # only take a subset of the rhs--the collection in is applied on
+                # TODO in some cases it is important to take the whole content
+                # of a collection into account
                 if counter >= self._expand_in:
                     break
                 counter += 1
@@ -603,31 +604,35 @@ class BFSPrefix(Prefix):
                 if find0 == pos:
                     next_inputs.extend(self._new_inputs(pos, cmp1_str, current, comparisons))
 
-            # it could also be, that a char is searched in the rhs, if this is the case, we have to handle this like in find
-            # but only if the lhs is not the char under observation and only if the char we look for does not already exist
-            # in the string we are searching
-            # concretely we check if the rhs is a substring of the current input, if yes we are looking for something in the
-            # current input
+            # it could also be, that a char is searched in the rhs, if this is
+            # the case, we have to handle this like in find but only if the lhs
+            # is not the char under observation and only if the char we look for
+            # does not already exist in the string we are searching
+            # concretely we check if the rhs is a substring of the current
+            # input, if yes we are looking for something in the # current input
             check_char = current[pos]
             if not next_inputs and self._check_in_string(compare[1], current, check_char, cmp0_str):
                 next_inputs.extend(self._new_inputs_non_direct_replace(current, cmp0_str, pos, comparisons))
 
             return next_inputs
 
-    # checks if the lhs is not in comp, comp is a non-empty string which is in current and the check_char must also
-    # be in current
+    # checks if the lhs is not in comp, comp is a non-empty string which is in
+    # current and the check_char must also be in current
     def _check_in_string(self, comp, current, check_char, lhs):
         return type(comp) is str and lhs not in comp \
                and comp != '' and comp in current and check_char in comp
 
-    # checks if the lhs is not in comp, comp is a non-empty string which is in current and the check_char must also
-    # be in current for tstr
+    # checks if the lhs is not in comp, comp is a non-empty string which is in
+    # current and the check_char must also be in current for tstr
     def _check_in_tstr(self, comp, pos, lhs):
-        return type(comp) is tstr and lhs not in comp \
-               and str(comp) != '' and comp.get_first_mapped_char() + len(comp) >= pos
+        scomp = str(comp)
+        if not scomp: return False
+        if str(lhs) not in scomp: return False
+        return comp.is_tpos_contained(pos)
 
     def _str_split_next_inputs(self, t, current, pos, comparisons):
-        # split is the same as find, but it may have a parameter which defines how many splits should be performed,
+        # split is the same as find, but it may have a parameter which defines
+        # how many splits should be performed,
         # this does not interest us at the moment
         # TODO in future take the number of splits into account
         try:
@@ -637,7 +642,8 @@ class BFSPrefix(Prefix):
         return self._str_find_next_inputs(t, current, pos, comparisons, Track)
 
     def _str_find_next_inputs(self, t, current, pos, comparisons, Track):
-        # t[1][2] is the string which is searched for in the input, replace A with this string
+        # t[1][2] is the string which is searched for in the input, replace A
+        # with this string
         input_string = t[1][2]
         beg = 0
         end = len(t[1][0])

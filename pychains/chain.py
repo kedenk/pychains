@@ -439,17 +439,13 @@ class BFSPrefix(Prefix):
         # for now
         next_inputs = []
         comparisons = []
-        only_tainted = [t for t in my_traces if type(t.opA) is tstr]
-        for t in only_tainted:
-            inp = []
-            if t.op in [Op.EQ, Op.NE]:
-                inp = self._next_inputs(t.opA, [t.opB], comparisons)
-            elif t.op in [Op.IN, Op.NOT_IN]:
-                inp = self._next_inputs(t.opA, t.opB, comparisons)
-
-            if inp:
-                next_inputs.extend(inp)
-                comparisons.append(t)
+        only_tainted = [t for t in my_traces if type(t.opA) is tstr and t.opA.is_tpos_contained(self.obs_pos)]
+        only_comparisons = [t for t in only_tainted if t.op in CmpSet]
+        for t in only_comparisons:
+            opB = [t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
+            inp = self._next_inputs(t.opA, t.opB, comparisons)
+            next_inputs.extend(inp)
+            comparisons.append(t)
 
         # add some letter as substitution as well
         # if nothing else was added, this means, that the character at the
@@ -484,11 +480,8 @@ class BFSPrefix(Prefix):
     def _next_inputs(self, opA, opB, comparisons):
         # check if the position that is currently watched is part of taint
         # this is equivalent to opA.x() == pos when opA is a single char
-        if opA.is_tpos_contained(self.obs_pos):
-            new_vals = [self._new_inputs(self.obs_pos, c, self.my_arg, comparisons) for c in opB]
-            return [j for i in new_vals for j in i] # flatten one level
-        else:
-            return []
+        new_vals = [self._new_inputs(self.obs_pos, c, self.my_arg, comparisons) for c in opB]
+        return [j for i in new_vals for j in i] # flatten one level
 
 class Chain:
 

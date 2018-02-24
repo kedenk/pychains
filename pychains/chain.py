@@ -381,29 +381,23 @@ class BFSPrefix(Prefix):
         # filter for inputs, that do not lead to success, i.e. inputs that are
         # already correct and inputs that can be pruned in another form (see
         # prune_input for more information)
-        for node in list(solutions):
+        for node in solutions:
             if self._prune_input(node):
                 solutions.remove(node)
             elif self._check_seen(BFSPrefix.already_seen, node):
                 solutions.remove(node)
-            elif not self._check_exception(node, fn):
-                solutions.remove(node)
-                # we are done. Just return.
-                node.my_arg = node.my_arg[0:-1]
-                return [BFSPrefix(node)]
         return solutions
 
     # for inputs with length greater 3 we can assume that if
     # it ends with a value which was not successful for a small input
     def _prune_input(self, node):
-        s = node.get_substituted_string(*node.change)
         # we do not need to create arbitrarily long strings, such a thing will
         # likely end in an infinite string, so we prune branches starting here
         if "BBBA" in node.get_next_input(*node.change):
             return True
+        s = node.get_substituted_string(*node.change)
         if len(s) <= 3:
             return False
-        # print(repr(s), repr(s[0:len(s) // 2]), repr(s[len(s) // 2:]))
         if s[len(s) // 2:].endswith(s[0:len(s) // 2]):
             return True
         if self._comparison_chain_equal(node):
@@ -434,37 +428,23 @@ class BFSPrefix(Prefix):
             return True
         already_seen.add(node.get_next_input(*node.change))
 
-    # check if an input causes a crash, if not it is likely successful and can
-    # be reported
-    # TODO this is currently quite inefficient, since we run the prog on each
-    # input twice, should be changed in future
-    def _check_exception(self, node, fn):
-        next_input = node.get_substituted_string(*node.change)
-        try:
-            fn(str(next_input))
-        except Exception as e:
-            return True
-        return False
-
     # Comparison filtering and new BFS_Prefix generation
-
     # lets first use a simple approach where strong equality is used for
     # replacement in the first input also we use parts of the rhs of the
     # in statement as substitution
     def solve(self, my_traces, i):
         # for now
         next_inputs = []
-        current = self.my_arg
-        length_next_inputs = 0
         comparisons = []
         for t in my_traces:
+            inp = []
             if t.op == Op.EQ or t.op == Op.NE:
-                next_inputs += self._eq_next_inputs(t, current, self.obs_pos, comparisons)
+                inp = self._eq_next_inputs(t, self.my_arg, self.obs_pos, comparisons)
             elif t.op == Op.IN or t.op == Op.NOT_IN:
-                next_inputs += self._in_next_inputs(t, current, self.obs_pos, comparisons)
+                inp = self._in_next_inputs(t, self.my_arg, self.obs_pos, comparisons)
 
-            if len(next_inputs) > length_next_inputs:
-                length_next_inputs = len(next_inputs)
+            if inp:
+                next_inputs.extend(inp)
                 comparisons.append(t)
 
         # add some letter as substitution as well
@@ -472,20 +452,16 @@ class BFSPrefix(Prefix):
         # position under observation did not have a comparison, so we do also
         # not add a "B", because the prefix is likely already completely wrong
         if next_inputs:
-            next_inputs += [(self.obs_pos, self.obs_pos + 1, "B", comparisons, current)]
+            next_inputs += [(self.obs_pos, self.obs_pos + 1, "B", comparisons, self.my_arg)]
 
         # now make the list of tuples a list of prefixes
-        prefix_list = []
-        for c in next_inputs:
-            prefix_list.append(BFSPrefix(self).apply_change(c))
-        return prefix_list
+        return [BFSPrefix(self).apply_change(c) for c in next_inputs]
 
     # appends a new input based on the current checking position, the subst. and
     # the value which was used for the run the next position to observe will lie
     # directly behind the substituted position
     def _new_inputs(self, pos, subst, current, comparisons):
-        inputs = []
-        inputs.append((pos, pos + len(subst), subst, comparisons, current))
+        inputs = [(pos, pos + len(subst), subst, comparisons, current)]
         # if the character under observation lies in the middle of the string,
         # it might be that we fulfilled the constraint and should now start with
         # appending stuff to the string again (new string will have length of
@@ -520,8 +496,7 @@ class BFSPrefix(Prefix):
 
         # check if the position that is currently watched is part of taint
         if opA.is_tpos_contained(pos):
-            lst = [c for c in opB if c != opA]
-            new_vals = [self._new_inputs(pos, c, current, comparisons) for c in lst]
+            new_vals = [self._new_inputs(pos, c, current, comparisons) for c in opB if c != opA]
             return [j for i in new_vals for j in i] # flatten one level
         elif self._check_in_tstr(opB, pos, opB):
             return self._new_inputs_non_direct_replace(current, opA, pos, comparisons)

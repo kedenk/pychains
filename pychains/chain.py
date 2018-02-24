@@ -478,8 +478,8 @@ class BFSPrefix(Prefix):
 
         # now make the list of tuples a list of prefixes
         prefix_list = []
-        for input in next_inputs:
-            prefix_list.append(BFSPrefix(prefix=None, change=input, parent=self))
+        for c in next_inputs:
+            prefix_list.append(BFSPrefix(prefix=None, change=c, parent=self))
         return prefix_list
 
     # appends a new input based on the current checking position, the subst. and

@@ -335,24 +335,30 @@ class BFSPrefix(Prefix):
         self.change = change
         self.parentstring = change[4]
         if prefix != None:
-            self.change = (len(prefix.my_arg) - 1, len(prefix.my_arg) - 1, prefix.my_arg[-1], [], prefix.my_arg)
+            last_idx = len(prefix.my_arg) - 1
+            change_pos = last_idx
+            obs_pos = last_idx
+            comparisons = []
+            input_str = prefix.my_arg
+            rep_str = prefix.my_arg[-1]
+            self.change = (change_pos, obs_pos, rep_str, comparisons, input_str)
             self.parentstring = self.change[4]
-            self.my_arg = self.get_substituted_string()
+            self.my_arg = self.get_substituted_string(*self.change)
         else:
-            self.my_arg = self.get_next_input()
+            self.my_arg = self.get_next_input(*self.change)
         # defines the observation position for this prefix
         self.obs_pos = self.change[1]
 
     # replaces at changepos the char with the given replacement in the
     # parentstring
-    def get_substituted_string(self):
-        return self.parentstring[0:self.change[0]] + self.change[2] + self.parentstring[self.change[0] + 1:]
+    def get_substituted_string(self, change_pos, obs_pos, rep_str, comparisons, input_str):
+        return self.parentstring[0:change_pos] + rep_str + self.parentstring[change_pos + 1:]
 
     # returns a new input by substituting the change position and adding a new
     # char at the next position that should be observed
-    def get_next_input(self):
-        next_input = self.get_substituted_string()
-        return next_input[:self.change[1]] + "A" + next_input[self.change[1]:]
+    def get_next_input(self, change_pos, obs_pos, rep_str, comparisons, input_str):
+        next_input = self.get_substituted_string(change_pos, obs_pos, rep_str, comparisons, input_str)
+        return next_input[:obs_pos] + "A" + next_input[obs_pos:]
 
     # returns the comparisons made on the position that is substituted
     def get_comparisons(self):
@@ -381,10 +387,10 @@ class BFSPrefix(Prefix):
     # for inputs with length greater 3 we can assume that if
     # it ends with a value which was not successful for a small input
     def _prune_input(self, node):
-        s = node.get_substituted_string()
+        s = node.get_substituted_string(*node.change)
         # we do not need to create arbitrarily long strings, such a thing will
         # likely end in an infinite string, so we prune branches starting here
-        if "BBBA" in node.get_next_input():
+        if "BBBA" in node.get_next_input(*node.change):
             return True
         if len(s) <= 3:
             return False
@@ -431,17 +437,17 @@ class BFSPrefix(Prefix):
     # check if the input is already in the queue, if yes one can just prune it
     # at this point
     def _check_seen(self, already_seen, node):
-        s = node.get_next_input()
+        s = node.get_next_input(*node.change)
         if s in already_seen:
             return True
-        already_seen.add(node.get_next_input())
+        already_seen.add(node.get_next_input(*node.change))
 
     # check if an input causes a crash, if not it is likely successful and can
     # be reported
     # TODO this is currently quite inefficient, since we run the prog on each
     # input twice, should be changed in future
     def _check_exception(self, node, fn):
-        next_input = node.get_substituted_string()
+        next_input = node.get_substituted_string(*node.change)
         try:
             fn(str(next_input))
         except Exception as e:

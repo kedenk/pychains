@@ -314,85 +314,6 @@ class DFPrefix(Prefix):
 
         return []
 
-class Chain:
-
-    def __init__(self):
-        self.initiate_bfs = False
-        self._my_args = []
-
-    def add_sys_args(self, var):
-        if type(var) is not tainted.tstr:
-            var = create_arg(var)
-        else:
-            var = create_arg(str(var))
-        self._my_args.append(var)
-
-    def sys_args(self):
-        return self._my_args[-1]
-
-    # Load the pickled state and also set the random set.
-    # Used to start execution at arbitrary iterations.
-    # requires prior dump
-    def load(self, i):
-        with open(Pickled % i, 'rb') as f:
-            self.__dict__ = pickle.load(f)
-            random.setstate(self.rstate)
-
-    # Save the execution states at each iteration.
-    def dump(self):
-        with open(Pickled % self.start_i, 'wb') as f:
-            self.rstate = random.getstate()
-            pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
-
-    def choose_prefix(self, solutions):
-        prefix = random.choice(solutions)
-        return prefix
-
-    def apply_prefix(self, prefix):
-        self.current_prefix = prefix
-        self.add_sys_args(prefix.my_arg)
-
-    def log_comparisons(self):
-        if Log_Comparisons:
-            for c in tainted.Comparisons: print(c.opA._idx, c)
-
-    def exec_argument(self, fn):
-        self.start_i = 0
-        if Load: self.load(Load)
-
-        # replace interesting things
-        solution_stack = [DFPrefix(random.choice(All_Characters))]
-
-        for i in range(self.start_i, MaxIter):
-            my_prefix, *solution_stack = solution_stack
-            self.apply_prefix(my_prefix)
-            self.start_i = i
-            if Dump: self.dump()
-            tainted.Comparisons = []
-            try:
-                log(">> %s" % self.sys_args(), 1)
-                v = fn(self.sys_args())
-                print('Arg: %s' % repr(self.sys_args()))
-                self.log_comparisons()
-                solution_stack = my_prefix.continue_valid()
-                if not solution_stack:
-                    return v
-            except Exception as e:
-                if i == MaxIter//100 and InitiateBFS:
-                    print('with BFS', flush=True)
-                    self.current_prefix = BFSPrefix(self.current_prefix)
-                traces = tainted.Comparisons
-                solutions = self.current_prefix.solve(traces, i)
-                solution_stack += self.current_prefix.prune(solutions, fn)
-
-                if not solution_stack:
-                    # remove one character and try again.
-                    new_arg = self.sys_args()[:-1]
-                    if not new_arg:
-                        raise Exception('No suitable continuation found')
-                    solution_stack = [self.current_prefix.create_prefix(new_arg)]
-
-
 class BFSPrefix(Prefix):
 
     already_seen = set()
@@ -726,36 +647,119 @@ class BFSPrefix(Prefix):
             end = t[1][4]
         except:
             pass
-        # search in the string for the value the program is looking for, if it exists, we are done here
-        # also if the position to check is not in the string we are searching, we can stop here
+        # search in the string for the value the program is looking for, if it
+        # exists, we are done here. also if the position to check is not in the
+        # string we are searching, we can stop here
         check_char = current[pos]
         if Track:
             # check if the position that is currently watched is part of the taint
-            if self._check_in_tstr(t[1][0][beg:end], pos, input_string):
+            comp = t[1][0][beg:end]
+            if type(comp) is tstr and self._check_in_tstr(comp, pos, input_string):
                 next_inputs.extend(self._new_inputs_non_direct_replace(current, input_string, pos, comparisons))
 
             return next_inputs
 
         if not self._check_in_string(t[1][0][beg:end], current, check_char, input_string):
             return []
-        # here we have to handle the input appending ourselves since we have a special case
-        # replace the position under observation with the new input string and ...
+        # here we have to handle the input appending ourselves since we have a
+        # special case replace the position under observation with the new input
+        # string and ...
         next_inputs.extend(self._new_inputs_non_direct_replace(current, input_string, pos, comparisons))
         return next_inputs
 
-    # instead of replacing the char under naively, we replace the char and either look at the positions specified below
+    # instead of replacing the char under naively, we replace the char and
+    # either look at the positions specified below
     def _new_inputs_non_direct_replace(self, current, input_string, pos, comparisons):
         inputs = []
         # set the next position behind what we just replaced
         inputs.append((0, pos, pos + len(input_string), input_string, comparisons, current))
         # set the next position in front of what we just replaced
         inputs.append((0, pos, pos, input_string, comparisons, current))
-        # set the next position at the end of the string, s.t. if we satisfied something, we can restart appending
-        # it may be that the replacement we did beforehand already sets the next pos to the end, then we do not need to
-        # add a new position here
+        # set the next position at the end of the string, s.t. if we satisfied
+        # something, we can restart appending
+        # it may be that the replacement we did beforehand already sets the next
+        # pos to the end, then we do not need to add a new position here
         if (pos + len(input_string) != len(current)):
             inputs.append((0, pos, len(current), input_string, comparisons, current))
         return inputs
+
+class Chain:
+
+    def __init__(self):
+        self.initiate_bfs = False
+        self._my_args = []
+
+    def add_sys_args(self, var):
+        if type(var) is not tainted.tstr:
+            var = create_arg(var)
+        else:
+            var = create_arg(str(var))
+        self._my_args.append(var)
+
+    def sys_args(self):
+        return self._my_args[-1]
+
+    # Load the pickled state and also set the random set.
+    # Used to start execution at arbitrary iterations.
+    # requires prior dump
+    def load(self, i):
+        with open(Pickled % i, 'rb') as f:
+            self.__dict__ = pickle.load(f)
+            random.setstate(self.rstate)
+
+    # Save the execution states at each iteration.
+    def dump(self):
+        with open(Pickled % self.start_i, 'wb') as f:
+            self.rstate = random.getstate()
+            pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
+
+    def choose_prefix(self, solutions):
+        prefix = random.choice(solutions)
+        return prefix
+
+    def apply_prefix(self, prefix):
+        self.current_prefix = prefix
+        self.add_sys_args(prefix.my_arg)
+
+    def log_comparisons(self):
+        if Log_Comparisons:
+            for c in tainted.Comparisons: print(c.opA._idx, c)
+
+    def exec_argument(self, fn):
+        self.start_i = 0
+        if Load: self.load(Load)
+
+        # replace interesting things
+        solution_stack = [DFPrefix(random.choice(All_Characters))]
+
+        for i in range(self.start_i, MaxIter):
+            my_prefix, *solution_stack = solution_stack
+            self.apply_prefix(my_prefix)
+            self.start_i = i
+            if Dump: self.dump()
+            tainted.Comparisons = []
+            try:
+                log(">> %s" % self.sys_args(), 1)
+                v = fn(self.sys_args())
+                print('Arg: %s' % repr(self.sys_args()))
+                self.log_comparisons()
+                solution_stack = my_prefix.continue_valid()
+                if not solution_stack:
+                    return v
+            except Exception as e:
+                if i == MaxIter//100 and InitiateBFS:
+                    print('with BFS', flush=True)
+                    self.current_prefix = BFSPrefix(self.current_prefix)
+                traces = tainted.Comparisons
+                solutions = self.current_prefix.solve(traces, i)
+                solution_stack += self.current_prefix.prune(solutions, fn)
+
+                if not solution_stack:
+                    # remove one character and try again.
+                    new_arg = self.sys_args()[:-1]
+                    if not new_arg:
+                        raise Exception('No suitable continuation found')
+                    solution_stack = [self.current_prefix.create_prefix(new_arg)]
 
 if __name__ == '__main__':
     import imp

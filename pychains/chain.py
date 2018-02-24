@@ -439,12 +439,13 @@ class BFSPrefix(Prefix):
         # for now
         next_inputs = []
         comparisons = []
-        for t in my_traces:
+        only_tainted = [t for t in my_traces if type(t.opA) is tstr]
+        for t in only_tainted:
             inp = []
-            if t.op == Op.EQ or t.op == Op.NE:
-                inp = self._eq_next_inputs(t, self.my_arg, self.obs_pos, comparisons)
-            elif t.op == Op.IN or t.op == Op.NOT_IN:
-                inp = self._in_next_inputs(t, self.my_arg, self.obs_pos, comparisons)
+            if t.op in [Op.EQ, Op.NE]:
+                inp = self._next_inputs(t.opA, [t.opB], comparisons)
+            elif t.op in [Op.IN, Op.NOT_IN]:
+                inp = self._next_inputs(t.opA, t.opB, comparisons)
 
             if inp:
                 next_inputs.extend(inp)
@@ -479,56 +480,15 @@ class BFSPrefix(Prefix):
     # current is the current argument
     # TODO find all occ. in near future
     # pos is the position being observed.
-    def _eq_next_inputs(self, trace_line, current, pos, comparisons):
-        opA, opB = trace_line.opA, trace_line.opB
-        if not type(opA) is tstr: return []
-        # check if the position that is currently watched is part of the taint
-        # note that checking opA is sufficient, assuming that only one of opA
-        # and opB are tstr, and the other is a str. By python's datamodel, the
-        # __eq__ are called on the subclass's object irrespective of whether it
-        # is in left or right.
-        if opA.is_tpos_contained(pos):
-            return self._new_inputs(pos, opB, current, comparisons)
-        else:
-            return []
-
     # apply the subsititution for the in statement
-    def _in_next_inputs(self, trace_line, current, pos, comparisons):
-        opA, opB = trace_line.opA, trace_line.opB
-        if not type(opA) is tstr: return []
-
+    def _next_inputs(self, opA, opB, comparisons):
         # check if the position that is currently watched is part of taint
-        if opA.is_tpos_contained(pos):
-            new_vals = [self._new_inputs(pos, c, current, comparisons) for c in opB if c != opA]
+        # this is equivalent to opA.x() == pos when opA is a single char
+        if opA.is_tpos_contained(self.obs_pos):
+            new_vals = [self._new_inputs(self.obs_pos, c, self.my_arg, comparisons) for c in opB]
             return [j for i in new_vals for j in i] # flatten one level
-        elif self._check_in_tstr(opB, pos, opB):
-            return self._new_inputs_non_direct_replace(current, opA, pos, comparisons)
         else:
             return []
-
-    # checks if the lhs is not in comp, comp is a non-empty string which is in
-    # current and the check_char must also be in current for tstr
-    def _check_in_tstr(self, comp, pos, lhs):
-        scomp = str(comp)
-        if not scomp: return False
-        if str(lhs) not in scomp: return False
-        return comp.is_tpos_contained(pos)
-
-    # instead of replacing the char under naively, we replace the char and
-    # either look at the positions specified below
-    def _new_inputs_non_direct_replace(self, current, input_string, pos, comparisons):
-        inputs = []
-        # set the next position behind what we just replaced
-        inputs.append(Change(pos, pos + len(input_string), input_string, comparisons, current))
-        # set the next position in front of what we just replaced
-        inputs.append(Change(pos, pos, input_string, comparisons, current))
-        # set the next position at the end of the string, s.t. if we satisfied
-        # something, we can restart appending
-        # it may be that the replacement we did beforehand already sets the next
-        # pos to the end, then we do not need to add a new position here
-        if (pos + len(input_string) != len(current)):
-            inputs.append(Change(pos, len(current), input_string, comparisons, current))
-        return inputs
 
 class Chain:
 

@@ -407,32 +407,15 @@ class BFSPrefix(Prefix):
         global Comparison_Equality_Chain
         initial_trace = node.get_comparisons()
         for i_eq in range(0, Comparison_Equality_Chain):
-            if node.parent is None:
-                return False
+            if not node.parent: return False
             node = node.parent
             cmp_trace = node.get_comparisons()
             if len(cmp_trace) != len(initial_trace):
                 return False
-            i = 0
-            for i in range(0, len(cmp_trace)):
-                cmp = cmp_trace[i]
-                init = initial_trace[i]
-                if cmp != init:
-                    if not self._compare_predicates_in_detail(cmp, init):
+            for i,c in enumerate(cmp_trace):
+                if c != initial_trace[i]:
                         return False
         return True
-
-    # checks if two predicates are equal for some special cases like in or
-    # special function calls
-    def _compare_predicates_in_detail(self, cmp, init):
-        if cmp.op == init.op:
-            # for split and find on string check if the value to look for is the
-            # same, if yes return true
-            if cmp.op in [Op.SPLIT_STR, Op.FIND_STR]:
-                return cmp.opA[-1] == cmp.opA[-1]
-            if cmp.op in [Op.IN, Op.NOT_IN]:
-                return False
-        return False
 
     # check if the input is already in the queue, if yes one can just prune it
     # at this point

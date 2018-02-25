@@ -423,7 +423,7 @@ class BFSPrefix(Prefix):
     def _check_seen(self, node):
         s = node.change.get_next_input()
         if s in BFSPrefix.already_seen: return True
-        BFSPrefix.already_seen.add(node.change.get_next_input())
+        BFSPrefix.already_seen.add(s)
 
     # Comparison filtering and new BFS_Prefix generation
     # lets first use a simple approach where strong equality is used for

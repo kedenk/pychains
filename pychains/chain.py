@@ -437,7 +437,7 @@ class BFSPrefix(Prefix):
         comparisons = [t for t in only_tainted if t.op in CmpSet]
         for t in comparisons:
             opB = [t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
-            next_inputs.extend(self._next_inputs(t.opA, t.opB, comparisons))
+            next_inputs.extend(self._next_inputs(t.opA, t.opB))
 
         # add some letter as substitution as well
         # if nothing else was added, this means, that the character at the
@@ -445,26 +445,26 @@ class BFSPrefix(Prefix):
         # not add a "B", because the prefix is likely already completely wrong
         if not next_inputs: return []
 
-        next_inputs.append(Change(self.obs_pos, self.obs_pos + 1, "B", comparisons, self.my_arg))
+        next_inputs.append((self.obs_pos, self.obs_pos + 1, "B"))
         # now make the list of tuples a list of prefixes
-        return [BFSPrefix(self).apply_change(c) for c in next_inputs]
+        return [BFSPrefix(self).apply_change(Change(obs, pos, s, comparisons, self.my_arg)) for (obs, pos, s) in next_inputs]
 
     # appends a new input based on the current checking position, the subst. and
     # the value which was used for the run the next position to observe will lie
     # directly behind the substituted position
-    def _new_inputs(self, pos, subst, current, comparisons):
-        inputs = [Change(pos, pos + len(subst), subst, comparisons, current)]
+    def _new_inputs(self, pos, subst):
+        inputs = [(pos, pos + len(subst), subst)]
         # if the character under observation lies in the middle of the string,
         # it might be that we fulfilled the constraint and should now start with
         # appending stuff to the string again (new string will have length of
         # current plus length of the substitution minus 1 since the position
         # under observation is substituted)
-        if pos < len(current) - 1:
-            inputs.append(Change(pos, len(current) + len(subst) - 1, subst, comparisons, current))
+        if pos < len(self.my_arg) - 1:
+            inputs.append((pos, len(self.my_arg) + len(subst) - 1, subst))
         return inputs
 
-    def _next_inputs(self, opA, opB, comparisons):
-        new_vals = [self._new_inputs(self.obs_pos, c, self.my_arg, comparisons) for c in opB]
+    def _next_inputs(self, opA, opB):
+        new_vals = [self._new_inputs(self.obs_pos, c) for c in opB]
         return [j for i in new_vals for j in i] # flatten one level
 
 class Chain:

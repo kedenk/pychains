@@ -403,20 +403,19 @@ class BFSPrefix(Prefix):
             return True
         return False
 
+    def _check_trace_eq(self, t1, t2):
+        if len(t1) != len(t2): return False
+        return not any((i,j) for (i,j) in zip(t1, t2) if t1 !=t2)
+
     # TODO this can be done just on the parent instead of checking for all
     # children
     def _comparison_chain_equal(self, node):
-        global Comparison_Equality_Chain
         initial_trace = node.comparisons
         for _ in range(Comparison_Equality_Chain):
-            if not node.parent: return False
             node = node.parent
-            cmp_trace = node.comparisons
-            if len(cmp_trace) != len(initial_trace):
+            if not node: return False
+            if not self._check_trace_eq(node.comparisons, initial_trace):
                 return False
-            for i,c in enumerate(cmp_trace):
-                if c != initial_trace[i]:
-                        return False
         return True
 
     # check if the input is already in the queue, if yes one can just prune it

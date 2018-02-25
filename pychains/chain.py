@@ -464,7 +464,7 @@ class BFSPrefix(Prefix):
 
     def _next_inputs(self, opA, opB):
         new_vals = [self._new_inputs(self.obs_pos, c) for c in opB]
-        return [j for i in new_vals for j in i] # flatten one level
+        return sum(new_vals, []) # flatten one level
 
 class Chain:
 

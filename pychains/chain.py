@@ -436,7 +436,7 @@ class BFSPrefix(Prefix):
         comparisons = [t for t in only_tainted if t.op in CmpSet]
         for t in comparisons:
             opB = [t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
-            next_inputs.extend(self._next_inputs(t.opA, t.opB))
+            next_inputs.extend(self._next_inputs(t.opA, opB))
 
         # add some letter as substitution as well
         # if nothing else was added, this means, that the character at the

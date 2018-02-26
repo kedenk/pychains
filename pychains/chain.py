@@ -41,7 +41,7 @@ Log_Comparisons = 0
 
 WeightedGeneration=False
 
-All_Characters = list(string.printable + string.whitespace)
+All_Characters = list(string.printable)
 
 CmpSet = [Op.EQ, Op.NE, Op.IN, Op.NOT_IN]
 
@@ -429,6 +429,7 @@ class Chain:
 
         # replace interesting things
         solution_stack = [DFPrefix(random.choice(All_Characters))]
+        seen = set()
 
         for i in range(self.start_i, MaxIter):
             my_prefix, *solution_stack = solution_stack
@@ -447,9 +448,18 @@ class Chain:
             except Exception as e:
                 if i == MaxIter//100 and InitiateBFS:
                     print('with BFS', flush=True)
+                    print(repr(self.current_prefix.my_arg), flush=True)
+                    print(RandomSeed, 'with BFS', flush=True, file=sys.stderr)
                     self.initiate_bfs = len(self.current_prefix.my_arg)
                 traces = tainted.Comparisons
-                solution_stack.extend(self.current_prefix.solve(traces, i))
+                solved = self.current_prefix.solve(traces, i)
+                if self.initiate_bfs:
+                    for s in solved:
+                        if repr(s.my_arg) in seen: continue
+                        seen.add(repr(s.my_arg))
+                        solution_stack.append(s)
+                else:
+                    solution_stack.extend(solved)
 
                 # prune works on the complete stack
                 solution_stack = self.current_prefix.prune(solution_stack, self.initiate_bfs)

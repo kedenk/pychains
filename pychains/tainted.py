@@ -28,6 +28,7 @@ class Instr:
         self.opA = a
         self.opB = b
         self.op = o
+
     def o(self):
         if self.op == Op.EQ:
             return 'eq'

@@ -115,13 +115,56 @@ class DFPrefix(Prefix):
         if  random.uniform(0,1) > Return_Probability:
             return [self.create_prefix(self.my_arg + random.choice(All_Characters))]
 
+    def prune_similar_parents(self, solutions):
+        # say we have two parents with the following last char children
+        # '{"abcd' ['x', 'y', 'z']
+        # '{"abcf' ['x', 'y', 'z']
+        # where the comparison op and opB for 'abcd' and 'abcf' are exactly the
+        # same (except for different opA), in such case, we need to preserve
+        # only one set of children
+        new_sol = []
+        seen = set()
+        for s in solutions:
+            if s.cmp_key in seen: continue
+            seen.add(s.cmp_key)
+            new_sol.append(s)
+        return new_sol
+
     def prune(self, solutions, n):
         if n:
             return [random.choice(solutions)]
-        return solutions
+        new_solutions = self.prune_similar_parents(solutions)
+        print("Len: %d -> %d" % (len(solutions), len(new_solutions)))
+        return new_solutions
+
+    def simple_key(self, myarg, traces):
+        v = ["(%s @%d %s)" % (i.o(), i.opA.x(), i.opB) for i in traces]
+        cmp_key = ''.join(v) +'<'+ myarg[-1] + '>'
+        return cmp_key
+
+    # alternative to simple_key
+    def squished_key(self, myarg, traces):
+        res = {}
+        for t in traces:
+            i = t.opA.x()
+            if i not in res: res[i] = []
+            res[i].append("%s %s" % (t.o(), t.opB))
+
+        # now, we can shrink repeating comparisons
+        new_key = []
+        prev = None
+        for k in sorted(res.keys()):
+            sv = ','.join(res[k])
+            if sv == prev: continue
+            prev = sv
+            new_key.append(sv)
+
+        return ' '.join(new_key) + '<' + myarg[-1] + '>'
 
     def create_prefix(self, myarg, fixes=[]):
-        return DFPrefix(myarg, fixes)
+        d = DFPrefix(myarg, fixes)
+        d.cmp_key = self.squished_key(myarg, self.traces)
+        return d
 
     def best_matching_str(self, elt, lst):
         largest, lelt = '', None
@@ -242,6 +285,7 @@ class DFPrefix(Prefix):
         arg_prefix = self.my_arg
         fixes = self.fixes
         last_char_added = arg_prefix[-1]
+        self.traces = traces
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
         while traces:
@@ -388,7 +432,6 @@ class Chain:
 
                 # prune works on the complete stack
                 solution_stack = self.current_prefix.prune(solution_stack, 0 if self.initiate_bfs else 1)
-                print("Len : ", len(solution_stack))
 
                 if not solution_stack:
                     if not self.initiate_bfs:

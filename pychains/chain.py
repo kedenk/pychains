@@ -322,9 +322,10 @@ class Change:
     #   list of comparisons made on the char under observation,
     #   string that was used as input for the parent which lead to the
     #       production of this Node)
-    def __init__(self, change_pos, obs_pos, rep_str, comparisons, input_str):
+    def __init__(self, change_pos, obs_pos, rep_str, input_str):
         self.__dict__.update(locals())
         del self.__dict__['self']
+        self._str, self._repr = None, None
 
     # returns a new input by substituting the change position and adding a new
     # char at the next position that should be observed
@@ -333,10 +334,14 @@ class Change:
         return next_input[:self.obs_pos] + "A" + next_input[self.obs_pos:]
 
     def __str__(self):
-        return self.input_str[0:self.change_pos] + self.rep_str + self.input_str[self.change_pos + 1:]
+        if not self._str:
+            self._str = self.input_str[0:self.change_pos] + self.rep_str + self.input_str[self.change_pos + 1:]
+        return self._str
 
     def __repr__(self):
-         return repr((self.change_pos, self.obs_pos, self.rep_str, self.comparisons, self.input_str))
+        if not self._repr:
+             self._repr = repr((self.change_pos, self.obs_pos, self.rep_str, self.input_str))
+        return self._repr
 
 
 class BFSPrefix(Prefix):
@@ -350,24 +355,20 @@ class BFSPrefix(Prefix):
         c = self.create_change_from_prefix(prefix)
         self.change = c
         self.my_arg = c.input_str
-        self.obs_pos = c.obs_pos
-        # defines the observation position for this prefix
-        self.parent = prefix
-        self.comparisons = c.comparisons
+        self.obs_pos = c.obs_pos # defines the observation position for this prefix
 
     def apply_change(self, c):
         self.change = c
         self.obs_pos = c.obs_pos
         self.my_arg = c.get_next_input()
         # defines the observation position for this prefix
-        self.comparisons = c.comparisons
         return self
 
     def create_change_from_prefix(self, prefix):
         last_idx = len(prefix.my_arg) - 1
         input_str = prefix.my_arg
         rep_str = prefix.my_arg[-1]
-        return Change(last_idx, last_idx, rep_str, [], input_str)
+        return Change(last_idx, last_idx, rep_str, input_str)
 
     def create_prefix(self, my_arg, fixes=[]):
         b = BFSPrefix(self)
@@ -384,7 +385,7 @@ class BFSPrefix(Prefix):
         # already correct and inputs that can be pruned in another form (see
         # prune_input for more information)
         for node in solutions:
-            if self._prune_input(node, traces, self.obs_pos):
+            if self._prune_input(node, traces):
                 solutions.remove(node)
             elif self._check_seen(node):
                 solutions.remove(node)
@@ -392,7 +393,7 @@ class BFSPrefix(Prefix):
 
     # for inputs with length greater 3 we can assume that if
     # it ends with a value which was not successful for a small input
-    def _prune_input(self, node, traces, obs_pos):
+    def _prune_input(self, node, traces):
         # we do not need to create arbitrarily long strings, such a thing will
         # likely end in an infinite string, so we prune branches starting here
         c = node.change
@@ -403,7 +404,10 @@ class BFSPrefix(Prefix):
             return False
         if s[len(s) // 2:].endswith(s[0:len(s) // 2]):
             return True
-        if self._comparison_chain_equal(node, traces, obs_pos):
+
+        # The node is not used here? This will remove all solutions
+        # from this current iteration.
+        if node._comparison_chain_equal(traces):
             return True
         return False
 
@@ -413,12 +417,12 @@ class BFSPrefix(Prefix):
 
     # TODO this can be done just on the parent instead of checking for all
     # children
-    def _comparison_chain_equal(self, node, traces, obs_pos):
+    def _comparison_chain_equal(self, traces):
         all_traces = [t for t in traces if type(t.opA) is tstr if t.op in CmpSet]
-        initial_trace = [t for t in all_traces if t.opA.is_tpos_contained(obs_pos)]
+        initial_trace = [t for t in all_traces if t.opA.is_tpos_contained(self.obs_pos)]
 
         for i in range(1, Comparison_Equality_Chain):
-            i_comparisons = [t for t in all_traces if t.opA.is_tpos_contained(obs_pos-i)]
+            i_comparisons = [t for t in all_traces if t.opA.is_tpos_contained(self.obs_pos-i)]
             if not self._check_trace_eq(i_comparisons, initial_trace): return False
         return True
 
@@ -450,7 +454,7 @@ class BFSPrefix(Prefix):
 
         next_inputs.append((self.obs_pos, self.obs_pos + 1, "B"))
         # now make the list of tuples a list of prefixes
-        return self._prune([BFSPrefix(self).apply_change(Change(obs, pos, s, comparisons, self.my_arg)) for (obs, pos, s) in next_inputs], my_traces)
+        return self._prune([BFSPrefix(self).apply_change(Change(obs, pos, s, self.my_arg)) for (obs, pos, s) in next_inputs], my_traces)
 
     # appends a new input based on the current checking position, the subst. and
     # the value which was used for the run the next position to observe will lie

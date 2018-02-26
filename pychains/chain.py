@@ -353,13 +353,15 @@ class BFSPrefix(Prefix):
     #  node
     def __init__(self, prefix, fixes=[]):
         c = self.create_change_from_prefix(prefix)
+        self.add_change(c)
+
+    def add_change(self, c):
         self.change = c
         self.my_arg = c.input_str
         self.obs_pos = c.obs_pos # defines the observation position for this prefix
 
     def apply_change(self, c):
-        self.change = c
-        self.obs_pos = c.obs_pos
+        self.add_change(c)
         self.my_arg = c.get_next_input()
         # defines the observation position for this prefix
         return self

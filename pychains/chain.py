@@ -390,11 +390,11 @@ class BFSPrefix(Prefix):
     def _prune_input(self, c, traces):
         # we do not need to create arbitrarily long strings, such a thing will
         # likely end in an infinite string, so we prune branches starting here
-        if "BBBA" in c.get_next_input():
-            return True
         s = str(c)
         if len(s) <= 3:
             return False
+        if "BBBA" in c.get_next_input():
+            return True
         if s[len(s) // 2:].endswith(s[0:len(s) // 2]):
             return True
 

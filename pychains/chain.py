@@ -130,12 +130,26 @@ class DFPrefix(Prefix):
             new_sol.append(s)
         return new_sol
 
-    def prune(self, solutions, n):
-        if n:
-            return [random.choice(solutions)]
-        new_solutions = self.prune_similar_parents(solutions)
-        print("Len: %d -> %d" % (len(solutions), len(new_solutions)))
-        return new_solutions
+
+    def prune_repeating_chars(self, solutions, n):
+        new_sol = []
+        for s in solutions:
+            if len(s.my_arg) - n < 2:
+                new_sol.append(s)
+                continue
+            if s.cmp_vals[-1].strip() == 'eq' and s.cmp_vals[-2] == s.cmp_vals[-3]:
+                continue
+            if s.cmp_vals[-1].strip() != 'eq' and s.cmp_vals[-1] == s.cmp_vals[-2]:
+                continue
+            new_sol.append(s)
+        return new_sol
+
+    def prune(self, solutions0, n):
+        if not n:
+            return [random.choice(solutions0)]
+        solutions1 = self.prune_similar_parents(solutions0)
+        solutions2 = self.prune_repeating_chars(solutions1, n)
+        return solutions2
 
     def simple_key(self, myarg, traces):
         v = ["(%s @%d %s)" % (i.o(), i.opA.x(), i.opB) for i in traces]
@@ -143,27 +157,34 @@ class DFPrefix(Prefix):
         return cmp_key
 
     # alternative to simple_key
-    def squished_key(self, myarg, traces):
-        res = {}
-        for t in traces:
-            i = t.opA.x()
-            if i not in res: res[i] = []
-            res[i].append("%s %s" % (t.o(), t.opB))
-
-        # now, we can shrink repeating comparisons
+    def squished_key(self, cmp_vals, myarg):
         new_key = []
         prev = None
-        for k in sorted(res.keys()):
-            sv = ','.join(res[k])
+        for sv in cmp_vals:
             if sv == prev: continue
             prev = sv
             new_key.append(sv)
 
         return ' '.join(new_key) + '<' + myarg[-1] + '>'
 
+    def get_cmp_vals(self, myarg, traces):
+        res = {}
+        for t in traces:
+            i = t.opA.x()
+            if i not in res: res[i] = []
+            res[i].append("%s %s" % (t.o(), t.opB))
+
+        vals = []
+        for k in sorted(res.keys()):
+            sv = ','.join(res[k])
+            vals.append(sv)
+        return vals
+
+
     def create_prefix(self, myarg, fixes=[]):
         d = DFPrefix(myarg, fixes)
-        d.cmp_key = self.squished_key(myarg, self.traces)
+        d.cmp_vals = self.get_cmp_vals(myarg, self.traces)
+        d.cmp_key = self.squished_key(d.cmp_vals, myarg)
         return d
 
     def best_matching_str(self, elt, lst):
@@ -363,7 +384,7 @@ class DFPrefix(Prefix):
 class Chain:
 
     def __init__(self):
-        self.initiate_bfs = False
+        self.initiate_bfs = 0
         self._my_args = []
 
     def add_sys_args(self, var):
@@ -426,12 +447,12 @@ class Chain:
             except Exception as e:
                 if i == MaxIter//100 and InitiateBFS:
                     print('with BFS', flush=True)
-                    self.initiate_bfs = True
+                    self.initiate_bfs = len(self.current_prefix.my_arg)
                 traces = tainted.Comparisons
                 solution_stack.extend(self.current_prefix.solve(traces, i))
 
                 # prune works on the complete stack
-                solution_stack = self.current_prefix.prune(solution_stack, 0 if self.initiate_bfs else 1)
+                solution_stack = self.current_prefix.prune(solution_stack, self.initiate_bfs)
 
                 if not solution_stack:
                     if not self.initiate_bfs:

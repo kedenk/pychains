@@ -379,12 +379,12 @@ class BFSPrefix(Prefix):
 
     # Input pruning -- only current solutions which is directly applied to the
     # result of solve
-    def _prune(self, solutions):
+    def _prune(self, solutions, traces):
         # filter for inputs, that do not lead to success, i.e. inputs that are
         # already correct and inputs that can be pruned in another form (see
         # prune_input for more information)
         for node in solutions:
-            if self._prune_input(node):
+            if self._prune_input(node, traces, self.obs_pos):
                 solutions.remove(node)
             elif self._check_seen(node):
                 solutions.remove(node)
@@ -392,7 +392,7 @@ class BFSPrefix(Prefix):
 
     # for inputs with length greater 3 we can assume that if
     # it ends with a value which was not successful for a small input
-    def _prune_input(self, node):
+    def _prune_input(self, node, traces, obs_pos):
         # we do not need to create arbitrarily long strings, such a thing will
         # likely end in an infinite string, so we prune branches starting here
         c = node.change
@@ -403,7 +403,7 @@ class BFSPrefix(Prefix):
             return False
         if s[len(s) // 2:].endswith(s[0:len(s) // 2]):
             return True
-        if self._comparison_chain_equal(node):
+        if self._comparison_chain_equal(node, traces, obs_pos):
             return True
         return False
 
@@ -413,13 +413,13 @@ class BFSPrefix(Prefix):
 
     # TODO this can be done just on the parent instead of checking for all
     # children
-    def _comparison_chain_equal(self, node):
-        initial_trace = node.comparisons
-        for _ in range(Comparison_Equality_Chain):
-            node = node.parent
-            if not node: return False
-            if not self._check_trace_eq(node.comparisons, initial_trace):
-                return False
+    def _comparison_chain_equal(self, node, traces, obs_pos):
+        all_traces = [t for t in traces if type(t.opA) is tstr if t.op in CmpSet]
+        initial_trace = [t for t in all_traces if t.opA.is_tpos_contained(obs_pos)]
+
+        for i in range(1, Comparison_Equality_Chain):
+            i_comparisons = [t for t in all_traces if t.opA.is_tpos_contained(obs_pos-i)]
+            if not self._check_trace_eq(i_comparisons, initial_trace): return False
         return True
 
     # check if the input is already in the queue, if yes one can just prune it
@@ -450,7 +450,7 @@ class BFSPrefix(Prefix):
 
         next_inputs.append((self.obs_pos, self.obs_pos + 1, "B"))
         # now make the list of tuples a list of prefixes
-        return self._prune([BFSPrefix(self).apply_change(Change(obs, pos, s, comparisons, self.my_arg)) for (obs, pos, s) in next_inputs])
+        return self._prune([BFSPrefix(self).apply_change(Change(obs, pos, s, comparisons, self.my_arg)) for (obs, pos, s) in next_inputs], my_traces)
 
     # appends a new input based on the current checking position, the subst. and
     # the value which was used for the run the next position to observe will lie

@@ -99,7 +99,7 @@ class Prefix:
     def solve(self, my_traces, i):
         raise NotImplemnted
 
-    def prune(self, solutions, fn):
+    def prune(self, solutions):
         raise NotImplemnted
 
     def create_prefix(self, myarg, fixes=[]):
@@ -115,7 +115,7 @@ class DFPrefix(Prefix):
         if  random.uniform(0,1) > Return_Probability:
             return [self.create_prefix(self.my_arg + random.choice(All_Characters))]
 
-    def prune(self, solutions, fn):
+    def prune(self, solutions):
         return [random.choice(solutions)]
 
     def create_prefix(self, myarg, fixes=[]):
@@ -374,8 +374,12 @@ class BFSPrefix(Prefix):
         b.my_arg = my_arg
         return b
 
-    # Input pruning
-    def prune(self, solutions, fn):
+    def prune(self, solutions):
+        return solutions
+
+    # Input pruning -- only current solutions which is directly applied to the
+    # result of solve
+    def _prune(self, solutions):
         # filter for inputs, that do not lead to success, i.e. inputs that are
         # already correct and inputs that can be pruned in another form (see
         # prune_input for more information)
@@ -446,7 +450,7 @@ class BFSPrefix(Prefix):
 
         next_inputs.append((self.obs_pos, self.obs_pos + 1, "B"))
         # now make the list of tuples a list of prefixes
-        return [BFSPrefix(self).apply_change(Change(obs, pos, s, comparisons, self.my_arg)) for (obs, pos, s) in next_inputs]
+        return self._prune([BFSPrefix(self).apply_change(Change(obs, pos, s, comparisons, self.my_arg)) for (obs, pos, s) in next_inputs])
 
     # appends a new input based on the current checking position, the subst. and
     # the value which was used for the run the next position to observe will lie
@@ -534,8 +538,10 @@ class Chain:
                     print('with BFS', flush=True)
                     self.current_prefix = BFSPrefix(self.current_prefix)
                 traces = tainted.Comparisons
-                solutions = self.current_prefix.solve(traces, i)
-                solution_stack += self.current_prefix.prune(solutions, fn)
+                solution_stack.extend(self.current_prefix.solve(traces, i))
+
+                # prune works on the complete stack
+                solution_stack = self.current_prefix.prune(solution_stack)
 
                 if not solution_stack:
                     if type(self.current_prefix) is not BFSPrefix:

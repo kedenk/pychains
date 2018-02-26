@@ -99,7 +99,7 @@ class Prefix:
     def solve(self, my_traces, i):
         raise NotImplemnted
 
-    def prune(self, solutions):
+    def prune(self, solutions, n):
         raise NotImplemnted
 
     def create_prefix(self, myarg, fixes=[]):
@@ -115,8 +115,10 @@ class DFPrefix(Prefix):
         if  random.uniform(0,1) > Return_Probability:
             return [self.create_prefix(self.my_arg + random.choice(All_Characters))]
 
-    def prune(self, solutions):
-        return [random.choice(solutions)]
+    def prune(self, solutions, n):
+        if n:
+            return [random.choice(solutions)]
+        return solutions
 
     def create_prefix(self, myarg, fixes=[]):
         return DFPrefix(myarg, fixes)
@@ -314,160 +316,6 @@ class DFPrefix(Prefix):
 
         return []
 
-class Change:
-    # the class looks like
-    #   change_position,
-    #   position for new observation,
-    #   string used for replacement,
-    #   list of comparisons made on the char under observation,
-    #   string that was used as input for the parent which lead to the
-    #       production of this Node)
-    def __init__(self, change_pos, obs_pos, rep_str, input_str):
-        self.__dict__.update(locals())
-        self.change_pos,self.obs_pos,self.rep_str = change_pos,obs_pos,rep_str
-        self._str = self.input_str[0:self.change_pos] + self.rep_str + self.input_str[self.change_pos + 1:]
-        self._nxt = self._str[:self.obs_pos] + "A" + self._str[self.obs_pos:]
-        self._repr = repr((self.change_pos, self.obs_pos, self.rep_str, self._str, self._nxt))
-
-    # returns a new input by substituting the change position and adding a new
-    # char at the next position that should be observed
-    def get_next_input(self): return self._nxt
-    def __str__(self): return self._str
-    def __repr__(self): return self._repr
-
-class BFSPrefix(Prefix):
-
-    already_seen = set()
-
-    # parent is an object of class BFSPrefix
-    # change is is used to determine a substitution
-    #  node
-    def __init__(self, prefix, fixes=[]):
-        c = self.create_change_from_prefix(prefix)
-        self.add_change(c)
-
-    def add_change(self, c):
-        self.change = c
-        self.my_arg = c.input_str
-        self.obs_pos = c.obs_pos # defines the observation position for this prefix
-
-    def apply_change(self, c):
-        self.add_change(c)
-        self.my_arg = c.get_next_input()
-        # defines the observation position for this prefix
-        return self
-
-    def create_change_from_prefix(self, prefix):
-        last_idx = len(prefix.my_arg) - 1
-        input_str = prefix.my_arg
-        rep_str = prefix.my_arg[-1]
-        return Change(last_idx, last_idx, rep_str, input_str)
-
-    def create_prefix(self, my_arg, fixes=[]):
-        b = BFSPrefix(self)
-        b.my_arg = my_arg
-        return b
-
-    def prune(self, solutions):
-        return solutions
-
-    # Input pruning -- only current solutions which is directly applied to the
-    # result of solve
-    def _prune(self, changes, traces):
-        # filter for inputs, that do not lead to success, i.e. inputs that are
-        # already correct and inputs that can be pruned in another form (see
-        # prune_input for more information)
-        to_remove = set()
-        for change in changes:
-            if self._prune_input(change, traces):
-                to_remove.add(change)
-            elif self._check_seen(change):
-                to_remove.add(change)
-        return sorted(set(changes) - to_remove, key=lambda x: x._str)
-
-    # for inputs with length greater 3 we can assume that if
-    # it ends with a value which was not successful for a small input
-    def _prune_input(self, c, traces):
-        # we do not need to create arbitrarily long strings, such a thing will
-        # likely end in an infinite string, so we prune branches starting here
-        if "BBBA" in c.get_next_input():
-            return True
-        s = str(c)
-        if len(s) <= 3:
-            return False
-        if s[len(s) // 2:].endswith(s[0:len(s) // 2]):
-            return True
-
-        # The node is not used here? This will remove all solutions
-        # from this current iteration.
-        if self._comparison_chain_equal(traces):
-            return True
-        return False
-
-    def _check_trace_eq(self, t1, t2):
-        if len(t1) != len(t2): return False
-        return not any((i,j) for (i,j) in zip(t1, t2) if t1 !=t2)
-
-    # TODO this can be done just on the parent instead of checking for all
-    # children
-    def _comparison_chain_equal(self, traces):
-        all_traces = [t for t in traces if type(t.opA) is tstr if t.op in CmpSet]
-        initial_trace = [t for t in all_traces if t.opA.is_tpos_contained(self.obs_pos)]
-
-        for i in range(1, Comparison_Equality_Chain):
-            i_comparisons = [t for t in all_traces if t.opA.is_tpos_contained(self.obs_pos-i)]
-            if not self._check_trace_eq(i_comparisons, initial_trace): return False
-        return True
-
-    # check if the input is already in the queue, if yes one can just prune it
-    # at this point
-    def _check_seen(self, change):
-        s = change.get_next_input()
-        if s in BFSPrefix.already_seen: return True
-        BFSPrefix.already_seen.add(s)
-
-    # Comparison filtering and new BFS_Prefix generation
-    # lets first use a simple approach where strong equality is used for
-    # replacement in the first input also we use parts of the rhs of the
-    # in statement as substitution
-    def solve(self, my_traces, i):
-        # for now
-        next_inputs = []
-        only_tainted = [t for t in my_traces if type(t.opA) is tstr and t.opA.is_tpos_contained(self.obs_pos)]
-        comparisons = [t for t in only_tainted if t.op in CmpSet]
-        for t in comparisons:
-            opB = [t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
-            next_inputs.extend(self._next_inputs(t.opA, opB))
-
-        # add some letter as substitution as well
-        # if nothing else was added, this means, that the character at the
-        # position under observation did not have a comparison, so we do also
-        # not add a "B", because the prefix is likely already completely wrong
-        if not next_inputs: return []
-
-        next_inputs.append(Change(self.obs_pos, self.obs_pos + 1, "B", self.my_arg))
-        pruned = self._prune(next_inputs, my_traces)
-        # now make the list of tuples a list of prefixes
-        return [BFSPrefix(self).apply_change(c) for c in pruned]
-
-    # appends a new input based on the current checking position, the subst. and
-    # the value which was used for the run the next position to observe will lie
-    # directly behind the substituted position
-    def _new_inputs(self, pos, subst):
-        inputs = [Change(pos, pos + len(subst), subst, self.my_arg)]
-        # if the character under observation lies in the middle of the string,
-        # it might be that we fulfilled the constraint and should now start with
-        # appending stuff to the string again (new string will have length of
-        # current plus length of the substitution minus 1 since the position
-        # under observation is substituted)
-        if pos < len(self.my_arg) - 1:
-            inputs.append(Change(pos, len(self.my_arg) + len(subst) - 1, subst, self.my_arg))
-        return inputs
-
-    def _next_inputs(self, opA, opB):
-        new_vals = [self._new_inputs(self.obs_pos, c) for c in opB]
-        return sum(new_vals, []) # flatten one level
-
 class Chain:
 
     def __init__(self):
@@ -534,15 +382,16 @@ class Chain:
             except Exception as e:
                 if i == MaxIter//100 and InitiateBFS:
                     print('with BFS', flush=True)
-                    self.current_prefix = BFSPrefix(self.current_prefix)
+                    self.initiate_bfs = True
                 traces = tainted.Comparisons
                 solution_stack.extend(self.current_prefix.solve(traces, i))
 
                 # prune works on the complete stack
-                solution_stack = self.current_prefix.prune(solution_stack)
+                solution_stack = self.current_prefix.prune(solution_stack, 0 if self.initiate_bfs else 1)
+                print("Len : ", len(solution_stack))
 
                 if not solution_stack:
-                    if type(self.current_prefix) is not BFSPrefix:
+                    if not self.initiate_bfs:
                         # remove one character and try again.
                         new_arg = self.sys_args()[:-1]
                         if not new_arg:

@@ -446,6 +446,7 @@ class Chain:
                 if not solution_stack:
                     return v
             except Exception as e:
+                seen.add(repr(self.current_prefix.my_arg))
                 if i == MaxIter//100 and InitiateBFS:
                     print('with BFS', flush=True)
                     print(repr(self.current_prefix.my_arg), flush=True)
@@ -453,13 +454,9 @@ class Chain:
                     self.initiate_bfs = len(self.current_prefix.my_arg)
                 traces = tainted.Comparisons
                 solved = self.current_prefix.solve(traces, i)
-                if self.initiate_bfs:
-                    for s in solved:
-                        if repr(s.my_arg) in seen: continue
-                        seen.add(repr(s.my_arg))
-                        solution_stack.append(s)
-                else:
-                    solution_stack.extend(solved)
+                for s in solved:
+                    if repr(s.my_arg) in seen: continue
+                    solution_stack.append(s)
 
                 # prune works on the complete stack
                 solution_stack = self.current_prefix.prune(solution_stack, self.initiate_bfs)

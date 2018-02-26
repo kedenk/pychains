@@ -324,25 +324,16 @@ class Change:
     #       production of this Node)
     def __init__(self, change_pos, obs_pos, rep_str, input_str):
         self.__dict__.update(locals())
-        del self.__dict__['self']
-        self._str, self._repr = None, None
+        self.change_pos,self.obs_pos,self.rep_str = change_pos,obs_pos,rep_str
+        self._str = self.input_str[0:self.change_pos] + self.rep_str + self.input_str[self.change_pos + 1:]
+        self._nxt = self._str[:self.obs_pos] + "A" + self._str[self.obs_pos:]
+        self._repr = repr((self.change_pos, self.obs_pos, self.rep_str, self._str, self._nxt))
 
     # returns a new input by substituting the change position and adding a new
     # char at the next position that should be observed
-    def get_next_input(self):
-        next_input = str(self)
-        return next_input[:self.obs_pos] + "A" + next_input[self.obs_pos:]
-
-    def __str__(self):
-        if not self._str:
-            self._str = self.input_str[0:self.change_pos] + self.rep_str + self.input_str[self.change_pos + 1:]
-        return self._str
-
-    def __repr__(self):
-        if not self._repr:
-             self._repr = repr((self.change_pos, self.obs_pos, self.rep_str, self.input_str))
-        return self._repr
-
+    def get_next_input(self): return self._nxt
+    def __str__(self): return self._str
+    def __repr__(self): return self._repr
 
 class BFSPrefix(Prefix):
 
@@ -382,23 +373,23 @@ class BFSPrefix(Prefix):
 
     # Input pruning -- only current solutions which is directly applied to the
     # result of solve
-    def _prune(self, solutions, traces):
+    def _prune(self, changes, traces):
         # filter for inputs, that do not lead to success, i.e. inputs that are
         # already correct and inputs that can be pruned in another form (see
         # prune_input for more information)
-        for node in solutions:
-            if self._prune_input(node, traces):
-                solutions.remove(node)
-            elif self._check_seen(node):
-                solutions.remove(node)
-        return solutions
+        to_remove = set()
+        for change in changes:
+            if self._prune_input(change, traces):
+                to_remove.add(change)
+            elif self._check_seen(change):
+                to_remove.add(change)
+        return sorted(set(changes) - to_remove, key=lambda x: x._str)
 
     # for inputs with length greater 3 we can assume that if
     # it ends with a value which was not successful for a small input
-    def _prune_input(self, node, traces):
+    def _prune_input(self, c, traces):
         # we do not need to create arbitrarily long strings, such a thing will
         # likely end in an infinite string, so we prune branches starting here
-        c = node.change
         if "BBBA" in c.get_next_input():
             return True
         s = str(c)
@@ -409,7 +400,7 @@ class BFSPrefix(Prefix):
 
         # The node is not used here? This will remove all solutions
         # from this current iteration.
-        if node._comparison_chain_equal(traces):
+        if self._comparison_chain_equal(traces):
             return True
         return False
 
@@ -430,8 +421,8 @@ class BFSPrefix(Prefix):
 
     # check if the input is already in the queue, if yes one can just prune it
     # at this point
-    def _check_seen(self, node):
-        s = node.change.get_next_input()
+    def _check_seen(self, change):
+        s = change.get_next_input()
         if s in BFSPrefix.already_seen: return True
         BFSPrefix.already_seen.add(s)
 
@@ -454,22 +445,23 @@ class BFSPrefix(Prefix):
         # not add a "B", because the prefix is likely already completely wrong
         if not next_inputs: return []
 
-        next_inputs.append((self.obs_pos, self.obs_pos + 1, "B"))
+        next_inputs.append(Change(self.obs_pos, self.obs_pos + 1, "B", self.my_arg))
+        pruned = self._prune(next_inputs, my_traces)
         # now make the list of tuples a list of prefixes
-        return self._prune([BFSPrefix(self).apply_change(Change(obs, pos, s, self.my_arg)) for (obs, pos, s) in next_inputs], my_traces)
+        return [BFSPrefix(self).apply_change(c) for c in pruned]
 
     # appends a new input based on the current checking position, the subst. and
     # the value which was used for the run the next position to observe will lie
     # directly behind the substituted position
     def _new_inputs(self, pos, subst):
-        inputs = [(pos, pos + len(subst), subst)]
+        inputs = [Change(pos, pos + len(subst), subst, self.my_arg)]
         # if the character under observation lies in the middle of the string,
         # it might be that we fulfilled the constraint and should now start with
         # appending stuff to the string again (new string will have length of
         # current plus length of the substitution minus 1 since the position
         # under observation is substituted)
         if pos < len(self.my_arg) - 1:
-            inputs.append((pos, len(self.my_arg) + len(subst) - 1, subst))
+            inputs.append(Change(pos, len(self.my_arg) + len(subst) - 1, subst, self.my_arg))
         return inputs
 
     def _next_inputs(self, opA, opB):

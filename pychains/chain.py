@@ -8,6 +8,7 @@ import tainted
 from tainted import Op, tstr
 
 RandomSeed = int(os.getenv('R') or '0')
+
 import random
 random.seed(RandomSeed)
 
@@ -20,6 +21,8 @@ Return_Probability = 1.0
 
 # The sampling distribution from which the characters are chosen.
 Distribution='U'
+
+Aggressive = True
 
 # We can choose to load the state at some iteration if we had dumped the
 # state in prior execution.
@@ -41,7 +44,7 @@ Log_Comparisons = 0
 
 WeightedGeneration=False
 
-All_Characters = list(string.printable + string.whitespace)
+All_Characters = list(string.printable)
 
 CmpSet = [Op.EQ, Op.NE, Op.IN, Op.NOT_IN]
 
@@ -86,20 +89,18 @@ def save_trace(traces, i, file='trace'):
         for i in traces: print(i, file=f)
 
 class Prefix:
-    def __init__(self, myarg, fixes=[]):
+    def __init__(self, myarg, fixes=[], bfs=False):
         if type(myarg) is not tainted.tstr:
             self.my_arg = create_arg(myarg)
         else:
             self.my_arg = myarg
         self.fixes = fixes
+        self.bfs = bfs
 
     def __repr__(self):
         return repr(self.my_arg)
 
     def solve(self, my_traces, i):
-        raise NotImplemnted
-
-    def prune(self, solutions):
         raise NotImplemnted
 
     def create_prefix(self, myarg, fixes=[]):
@@ -115,11 +116,8 @@ class DFPrefix(Prefix):
         if  random.uniform(0,1) > Return_Probability:
             return [self.create_prefix(self.my_arg + random.choice(All_Characters))]
 
-    def prune(self, solutions):
-        return [random.choice(solutions)]
-
     def create_prefix(self, myarg, fixes=[]):
-        return DFPrefix(myarg, fixes)
+        return DFPrefix(myarg, fixes, self.bfs)
 
     def best_matching_str(self, elt, lst):
         largest, lelt = '', None
@@ -368,9 +366,6 @@ class BFSPrefix(Prefix):
         b.my_arg = my_arg
         return b
 
-    def prune(self, solutions):
-        return solutions
-
     # Input pruning -- only current solutions which is directly applied to the
     # result of solve
     def _prune(self, changes, traces):
@@ -473,6 +468,7 @@ class Chain:
     def __init__(self):
         self.initiate_bfs = False
         self._my_args = []
+        self.seen = set()
 
     def add_sys_args(self, var):
         if type(var) is not tainted.tstr:
@@ -510,6 +506,14 @@ class Chain:
         if Log_Comparisons:
             for c in tainted.Comparisons: print(c.opA._idx, c)
 
+    def prune(self, solutions):
+        # never retry an argument.
+        solutions = [s for s in solutions if repr(s.my_arg) not in self.seen]
+        if self.initiate_bfs:
+            return solutions
+        else:
+            return [random.choice(solutions)]
+
     def exec_argument(self, fn):
         self.start_i = 0
         if Load: self.load(Load)
@@ -532,24 +536,31 @@ class Chain:
                 if not solution_stack:
                     return v
             except Exception as e:
+                self.seen.add(repr(self.current_prefix.my_arg))
+                log('Exception %s' % e)
                 if i == MaxIter//100 and InitiateBFS:
-                    print('with BFS', flush=True)
-                    self.current_prefix = BFSPrefix(self.current_prefix)
-                traces = tainted.Comparisons
-                solution_stack.extend(self.current_prefix.solve(traces, i))
+                    print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True)
+                    self.arg_at_bfs = self.current_prefix.my_arg
+                    if Aggressive:
+                        self.current_prefix = BFSPrefix(self.current_prefix)
+                    else:
+                        self.current_prefix.bfs = True
+                    self.initiate_bfs = True
+                self.traces = tainted.Comparisons
+                solution_stack.extend(self.current_prefix.solve(self.traces, i))
 
                 # prune works on the complete stack
-                solution_stack = self.current_prefix.prune(solution_stack)
+                solution_stack = self.prune(solution_stack)
 
                 if not solution_stack:
-                    if type(self.current_prefix) is not BFSPrefix:
+                    if not self.initiate_bfs:
                         # remove one character and try again.
                         new_arg = self.sys_args()[:-1]
                         if not new_arg:
-                            raise Exception('No suitable continuation found')
+                            raise Exception('DFS: No suitable continuation found')
                         solution_stack = [self.current_prefix.create_prefix(new_arg)]
                     else:
-                        raise Exception('No suitable continuation found')
+                        raise Exception('BFS: No suitable continuation found')
 
 
 if __name__ == '__main__':

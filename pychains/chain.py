@@ -36,11 +36,11 @@ Pickled = '.pickle/ExecFile-%s.pickle'
 
 Track = True
 
-InitiateBFS = True
+InitiateBFS = False
 
 Debug=1
 
-Log_Comparisons = 0
+Log_Comparisons = 1
 
 WeightedGeneration=False
 
@@ -62,7 +62,7 @@ def brk(v=True):
 
 def create_arg(s):
     if Track:
-        return tainted.tstr(s, idx=0)
+        return tainted.tstr(s)
     else:
         return s
 
@@ -504,7 +504,7 @@ class Chain:
 
     def log_comparisons(self):
         if Log_Comparisons:
-            for c in tainted.Comparisons: print(c.opA._idx, c)
+            for c in tainted.Comparisons: print("%d,%s" % (c.opA.x(), repr(c)))
 
     def prune(self, solutions):
         # never retry an argument.
@@ -528,7 +528,7 @@ class Chain:
             if Dump: self.dump()
             tainted.Comparisons = []
             try:
-                log(">> %s" % self.sys_args(), 1)
+                log(">> %s" % repr(self.sys_args()), 1)
                 v = fn(self.sys_args())
                 print('Arg: %s' % repr(self.sys_args()))
                 self.log_comparisons()

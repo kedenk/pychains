@@ -36,7 +36,7 @@ Pickled = '.pickle/ExecFile-%s.pickle'
 
 Track = True
 
-InitiateBFS = False
+InitiateBFS = True
 
 Debug=1
 
@@ -52,6 +52,9 @@ Comparison_Equality_Chain = 3
 
 def log(var, i=1):
     if Debug >= i: print(repr(var), file=sys.stderr, flush=True)
+
+def o(d='', var=None, i=1):
+    if Debug >= i: print(d, repr(var) if var else '', file=sys.stdout, flush=True)
 
 def brk(v=True):
     if not v: return None
@@ -528,10 +531,10 @@ class Chain:
             if Dump: self.dump()
             tainted.Comparisons = []
             try:
-                log(">> %s" % repr(self.sys_args()), 1)
+                log(">> %s" % self.sys_args(), 1)
                 v = fn(self.sys_args())
-                print('Arg: %s' % repr(self.sys_args()))
                 self.log_comparisons()
+                o('Arg:', self.sys_args(), 0)
                 solution_stack = my_prefix.continue_valid()
                 if not solution_stack:
                     return v

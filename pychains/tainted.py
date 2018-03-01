@@ -519,7 +519,7 @@ class tstr(str):
     def join(self, iterable):
         mystr = ''
         mytaint = []
-        sep_taint = self._taint 
+        sep_taint = self._taint
         lst = list(iterable)
         for i,s in enumerate(lst):
             staint = s._taint if type(i) is tstr else [-1] * len(s)
@@ -586,7 +586,7 @@ class tstr(str):
     # returns int
     def find(self, sub, start=None, end=None):
         global Comparisons
-        Comparisons.append(Instr(Op.FIND_STR, self, sep))
+        Comparisons.append(Instr(Op.FIND_STR, self, sub))
         return super().find(sub, start, end)
 
     # returns int

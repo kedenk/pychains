@@ -249,6 +249,7 @@ class DFPrefix(Prefix):
 
             idx, k, info = self.parsing_state(h, arg_prefix)
             log((RandomSeed, i, idx, k, info, "is tainted", isinstance(h.opA, tainted.tstr)), 1)
+            sprefix = str(arg_prefix)
 
             if k == EState.Char:
                 # A character comparison of the *last* char.
@@ -266,7 +267,7 @@ class DFPrefix(Prefix):
                     fixes = []
 
                 # check for line cov here.
-                prefix = arg_prefix[:-1]
+                prefix = sprefix[:-1]
                 sols = []
                 chars = [new_char for v in corr for new_char in v]
                 chars = chars if WeightedGeneration else sorted(set(chars))
@@ -279,9 +280,9 @@ class DFPrefix(Prefix):
                 # we need to (1) find where h.opA._idx is within
                 # sys_args, and trim sys_args to that location, and
                 # add a new character.
-                args = arg_prefix[:h.opA.x()] + random.choice(All_Characters)
+                fix =  [sprefix[h.opA.x()]]
+                args = sprefix[:h.opA.x()] + random.choice([i for i in All_Characters if i != fix[0]])
                 # we already know the result for next character
-                fix =  [arg_prefix[h.opA.x()]]
                 sols = [self.create_prefix(args, fix)]
                 return sols # VERIFY - TODO
 
@@ -294,14 +295,14 @@ class DFPrefix(Prefix):
                     assert False
                 common = os.path.commonprefix([str(h.opA), opB])
                 assert str(h.opB)[len(common)-1] == last_char_added
-                arg = "%s%s" % (arg_prefix, str(h.opB)[len(common):])
+                arg = "%s%s" % (sprefix, str(h.opB)[len(common):])
                 sols = [self.create_prefix(arg)]
                 return sols
             elif k == EState.EOF:
                 # An empty comparison at the EOF
                 sols = []
                 for new_char in All_Characters:
-                    arg = "%s%s" % (arg_prefix, new_char)
+                    arg = "%s%s" % (sprefix, new_char)
                     sols.append(self.create_prefix(arg))
 
                 return sols

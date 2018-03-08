@@ -60,6 +60,11 @@ class Instr:
                 return "%s in %s" % (repr(self.opA), repr(self.opB))
             else:
                 return "%s not in %s" %  (repr(self.opA), repr(self.opB))
+        elif self.op == Op.SPLIT_STR:
+            return "%s.split(%s)" % (repr(self.opA), repr(self.opB))
+        elif self.op == Op.FIND_STR:
+            return "%s.find(%s)" % (repr(self.opA), repr(self.opB))
+        #TODO add split and find here
         else:
             assert False
 
@@ -119,6 +124,10 @@ class tstr(str):
     # tpos is the index in the input string that we are
     # looking to see if contained in this string.
     def is_tpos_contained(self, tpos):
+        # if the tstr is empty, we still need to replace if the position matches, this may be end of string for example
+        # and a new char is expected
+        if str(self) == "" and self._idx == tpos:
+            return True
         tainted_len = len(self) - self._unmapped_till
         if self._idx <= tpos < self._idx + tainted_len: return True
         return False
@@ -238,55 +247,55 @@ def make_str_wrapper(fun):
 
         if res.__class__ == str:
             if fun.__name__ == '__mul__': #repeating (*)
-                pudb.set_trace()
+                # # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == '__rmul__': #repeating (*)
-                pudb.set_trace()
+                # # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'ljust':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'splitlines':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'center':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'rjust':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'zfill':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'format':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'rpartition':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'decode':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'partition':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'rsplit':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'encode':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'replace':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'title':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             elif fun.__name__ == 'join':
-                pudb.set_trace()
+                # pudb.set_trace()
                 return tstr(res, idx=0)
             else:
-                pudb.set_trace()
+                # pudb.set_trace()
                 raise Exception('%s Not implemented in TSTR' % fun.__name__)
         return res
     return proxy

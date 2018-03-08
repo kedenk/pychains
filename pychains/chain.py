@@ -3,6 +3,7 @@ import os.path
 import string
 import enum
 import sys
+import re
 
 import tainted
 from tainted import Op, tstr
@@ -10,6 +11,8 @@ from tainted import Op, tstr
 RandomSeed = int(os.getenv('R') or '0')
 import random
 random.seed(RandomSeed)
+
+
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
 MaxIter = 10000
@@ -336,6 +339,7 @@ class BFSPrefix(Prefix):
         self.change = change
         self.parentstring = change[4]
         self.causes_crash = True
+        self._expand_in = 3
         if prefix != None:
             self.change = (len(prefix.my_arg) - 1, len(prefix.my_arg) - 1, prefix.my_arg[-1], [], prefix.my_arg)
             self.parentstring = self.change[4]
@@ -361,7 +365,7 @@ class BFSPrefix(Prefix):
         return self.change[3]
 
     def create_prefix(self, myarg, fixes=[]):
-        return BFSPrefix(myarg, fixes)
+        return BFSPrefix(prefix=DFPrefix(myarg))
 
     # Input pruning
     def prune(self, solutions, fn):
@@ -387,7 +391,7 @@ class BFSPrefix(Prefix):
         s = node.get_substituted_string()
         # we do not need to create arbitrarily long strings, such a thing will
         # likely end in an infinite string, so we prune branches starting here
-        if "BBBA" in node.get_next_input():
+        if "BBBA" in str(node.get_next_input()):
             return True
         if len(s) <= 3:
             return False
@@ -414,7 +418,7 @@ class BFSPrefix(Prefix):
             for i in range(0, len(cmp_trace)):
                 cmp = cmp_trace[i]
                 init = initial_trace[i]
-                if cmp != init:
+                if str(cmp) != str(init):
                     if not self._compare_predicates_in_detail(cmp, init):
                         return False
         return True
@@ -422,11 +426,11 @@ class BFSPrefix(Prefix):
     # checks if two predicates are equal for some special cases like in or
     # special function calls
     def _compare_predicates_in_detail(self, cmp, init):
-        if cmp.op == init.op:
+        if str(cmp.op) == str(init.op):
             # for split and find on string check if the value to look for is the
             # same, if yes return true
             if cmp.op in [Op.SPLIT_STR, Op.FIND_STR]:
-                return cmp.opA[-1] == cmp.opA[-1]
+                return str(cmp.opA[-1]) == str(cmp.opA[-1])
             if cmp.op in [Op.IN, Op.NOT_IN]:
                 return False
         return False
@@ -434,7 +438,7 @@ class BFSPrefix(Prefix):
     # check if the input is already in the queue, if yes one can just prune it
     # at this point
     def _check_seen(self, already_seen, node):
-        s = node.get_next_input()
+        s = str(node.get_next_input())
         if s in already_seen:
             return True
         already_seen.add(node.get_next_input())
@@ -444,15 +448,15 @@ class BFSPrefix(Prefix):
     # TODO this is currently quite inefficient, since we run the prog on each
     # input twice, should be changed in future
     def _check_exception(self, node, fn):
-        next_input = node.get_substituted_string()
-
-        try:
-            fn(str(next_input))
-        except Exception as e:
+        # next_input = node.get_substituted_string()
+        #
+        # try:
+        #     fn(str(next_input))
+        # except Exception as e:
             return True
-
-        node.causes_crash = False
-        return False
+        #
+        # node.causes_crash = False
+        # return False
 
     # Comparison filtering and new BFS_Prefix generation
 
@@ -492,6 +496,13 @@ class BFSPrefix(Prefix):
         prefix_list = []
         for input in next_inputs:
             prefix_list.append(BFSPrefix(prefix=None, change=input, parent=self))
+
+        for node in list(prefix_list):
+            if node.get_substituted_string() not in self.already_seen:
+                new_node = BFSPrefix(prefix=node)
+                new_node.change = (len(node.get_substituted_string()), len(node.get_substituted_string()), node.change[2], [], node.get_substituted_string())
+                new_node.my_arg = node.get_substituted_string()
+                prefix_list.append(new_node)
         return prefix_list
 
     # appends a new input based on the current checking position, the subst. and
@@ -550,25 +561,26 @@ class BFSPrefix(Prefix):
 
     # apply the subsititution for the in statement
     def _in_next_inputs(self, trace_line, current, pos, comparisons):
-        compare = trace_line[1]
+        opA, opB = trace_line.opA, trace_line.opB
         next_inputs = []
         if Track:
             # check if the position that is currently watched is part of taint
-            if type(compare[0]) is tstr and compare[0].is_tpos_contained(pos):
+            if type(opA) is tstr and opA.is_tpos_contained(pos):
                 counter = 0
-                for cmp in compare[1]:
-                    if compare[0] == cmp:
+                for cmp in str(opB):
+                    if str(opA) == cmp:
                         continue
                     if counter > self._expand_in:
                         break
                     counter += 1
                     next_inputs.extend(self._new_inputs(pos, cmp, current, comparisons))
-            elif type(compare[1]) is tstr and self._check_in_tstr(compare[1], pos, compare[0]):
-                next_inputs.extend(self._new_inputs_non_direct_replace(current, compare[0], pos, comparisons))
+            elif type(opB) is tstr and self._check_in_tstr(opB, pos, opA):
+                next_inputs.extend(self._new_inputs_non_direct_replace(current, opA, pos, comparisons))
             else:
                 return []
             return next_inputs
         else:
+            compare = (trace_line.opA, trace_line.opB)
             # the lhs must be a string
             if type(compare[0]) is not str:
                 return []
@@ -615,7 +627,8 @@ class BFSPrefix(Prefix):
     def _check_in_tstr(self, comp, pos, lhs):
         scomp = str(comp)
         if not scomp: return False
-        if str(lhs) not in scomp: return False
+        #TODO this was false, it said not in after the refactoring
+        if str(lhs) in scomp: return False
         return comp.is_tpos_contained(pos)
 
     def _str_split_next_inputs(self, t, current, pos, comparisons):
@@ -627,14 +640,14 @@ class BFSPrefix(Prefix):
             t[1][3] = 0
         except:
             pass
-        return self._str_find_next_inputs(t, current, pos, comparisons, Track)
+        return self._str_find_next_inputs(t, current, pos, comparisons)
 
-    def _str_find_next_inputs(self, t, current, pos, comparisons, Track):
+    def _str_find_next_inputs(self, t, current, pos, comparisons):
         # t[1][2] is the string which is searched for in the input, replace A
         # with this string
-        input_string = t[1][2]
+        input_string = t.opB
         beg = 0
-        end = len(t[1][0])
+        end = len(t.opA)
         next_inputs = []
         try:
             beg = t[1][3]
@@ -644,8 +657,7 @@ class BFSPrefix(Prefix):
         # search in the string for the value the program is looking for, if it
         # exists, we are done here. also if the position to check is not in the
         # string we are searching, we can stop here
-        check_char = current[pos]
-        comp = t[1][0][beg:end]
+        comp = t.opA[beg:end]
         if Track:
             # check if the position that is currently watched is part of the taint
             if type(comp) is tstr and self._check_in_tstr(comp, pos, input_string):
@@ -653,6 +665,7 @@ class BFSPrefix(Prefix):
             return next_inputs
 
         else:
+            check_char = current[pos]
             # here we have to handle the input appending ourselves since we have a
             # special case replace the position under observation with the new input
             # string and ...
@@ -725,6 +738,9 @@ class Chain:
 
         # replace interesting things
         solution_stack = [DFPrefix(random.choice(All_Characters))]
+        # solution_stack = [DFPrefix("(-12 + ( pi * ")]
+        # solution_stack = [DFPrefix("{\"asd\":[ ")]
+        # solution_stack = [DFPrefix("A")]
 
         for i in range(self.start_i, MaxIter):
             my_prefix, *solution_stack = solution_stack
@@ -734,19 +750,24 @@ class Chain:
             tainted.Comparisons = []
             try:
                 log(">> %s" % self.sys_args(), 1)
+                # sys.settrace(traceit)
                 v = fn(self.sys_args())
+                # sys.settrace(None)
                 print('Arg: %s' % repr(self.sys_args()))
                 self.log_comparisons()
                 solution_stack = my_prefix.continue_valid()
                 if not solution_stack:
                     return v
             except Exception as e:
-                if i == MaxIter//100 and InitiateBFS:
+                # sys.settrace(None)
+                if i == 0: #i == MaxIter//100 and InitiateBFS:
                     print('with BFS', flush=True)
                     self.current_prefix = BFSPrefix(self.current_prefix)
                 traces = tainted.Comparisons
+                tracelength = len(traces)
                 solutions = self.current_prefix.solve(traces, i)
                 solution_stack += self.current_prefix.prune(solutions, fn)
+                # assert tracelength == len(traces)
 
                 if not solution_stack:
                     # remove one character and try again.
@@ -755,9 +776,53 @@ class Chain:
                         raise Exception('No suitable continuation found')
                     solution_stack = [self.current_prefix.create_prefix(new_arg)]
 
+
+# TODO those regexes are not perfect, we might want to work on the AST instead
+def refactor(code : str):
+    code = "from tainted import tstr\n" + code
+    offset = 0
+    # print(re.findall(r'""".*?"""',code,flags=re.DOTALL))
+    code = re.sub(r'""".*?"""',"", code,flags=re.DOTALL)
+
+    offset = 0
+    for match in (re.finditer(r'(?![a-zA-Z0-9_])str\(.*?\)', code)):
+        code = code[ :offset + match.regs[0][0]] + "tstr(" + code[offset + match.regs[0][0]:offset + match.regs[0][1]] + ")" + code[offset + match.regs[0][1]: ]
+        offset += len("tstr()")
+    # print(code)
+
+    offset = 0
+    for match in (re.finditer(r'''(?x)   # verbose mode
+        (?<!\\)    # not preceded by a backslash
+        "          # a literal double-quote
+        .*?        # 1-or-more characters
+        (?<!\\)    # not preceded by a backslash
+        "          # a literal double-quote
+        ''', code)):
+        code = code[ :offset + match.regs[0][0]] + "tstr(" + code[offset + match.regs[0][0]:offset + match.regs[0][1]] + ")" + code[offset + match.regs[0][1]: ]
+        offset += len("tstr()")
+
+    offset = 0
+    for match in (re.finditer(r"""(?x)   # verbose mode
+        (?<!\\)    # not preceded by a backslash
+        '          # a literal double-quote
+        .*?        # 1-or-more characters
+        (?<!\\)    # not preceded by a backslash
+        '          # a literal double-quote
+        """, code)):
+        code = code[ :offset + match.regs[0][0]] + "tstr(" + code[offset + match.regs[0][0]:offset + match.regs[0][1]] + ")" + code[offset + match.regs[0][1]: ]
+        offset += len("tstr()")
+
+
+    #TODO currently a fast hack to get things running
+    with open("module.py","w") as module:
+        module.write(code)
+    return code
+
+
 if __name__ == '__main__':
     import imp
     arg = sys.argv[1]
-    _mod = imp.load_source('mymod', arg)
+    refac = refactor(open(arg,"r").read())
+    _mod = imp.load_source('mymod', "module.py")
     e = Chain()
     e.exec_argument(_mod.main)

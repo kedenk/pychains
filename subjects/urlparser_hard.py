@@ -27,9 +27,9 @@ uses_fragment = ['ftp', 'hdl', 'http', 'gopher', 'news',
                                'file', 'prospero', '']
 
 # Characters valid in scheme names
-scheme_chars = ('abcdefghijklmnopqrstuvwxyz'
-                'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-                '0123456789'
+scheme_chars = ('abcdefghijklmnopqrstuvwxyz' +
+                'ABCDEFGHIJKLMNOPQRSTUVWXYZ' +
+                '0123456789' +
                 '+-.')
 
 MAX_CACHE_SIZE = 20

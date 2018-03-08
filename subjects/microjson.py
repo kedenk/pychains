@@ -20,7 +20,7 @@ DIGITS = set([str(i) for i in range(0, 10)])
 NUMSTART = DIGITS.union(['.','-','+'])
 NUMCHARS = NUMSTART.union(['e','E'])
 ESC_MAP = {'n':'\n','t':'\t','r':'\r','b':'\b','f':'\f'}
-REV_ESC_MAP = dict([(_v,_k) for _k,_v in list(ESC_MAP.items())] + [('"','"')])
+REV_ESC_MAP = dict([(_v,_k) for _k,_v in list(ESC_MAP.items())] + [('\"','\"')])
 
 # error messages
 E_BYTES = 'input string must be type str containing ASCII or UTF-8 bytes'

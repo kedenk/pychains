@@ -9,6 +9,8 @@ from tainted import Op, tstr
 
 RandomSeed = int(os.getenv('R') or '0')
 
+MyPrefix = os.getenv('MY_PREFIX') or None
+
 import random
 random.seed(RandomSeed)
 
@@ -523,7 +525,10 @@ class Chain:
         if Load: self.load(Load)
 
         # replace interesting things
-        solution_stack = [DFPrefix(random.choice(All_Characters))]
+        if MyPrefix:
+            solution_stack = [DFPrefix('[10,229, 344]')]
+        else:
+            solution_stack = [DFPrefix(random.choice(All_Characters))]
 
         for i in range(self.start_i, MaxIter):
             my_prefix, *solution_stack = solution_stack

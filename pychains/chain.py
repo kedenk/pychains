@@ -526,7 +526,7 @@ class Chain:
 
         # replace interesting things
         if MyPrefix:
-            solution_stack = [DFPrefix('[10,229, 344]')]
+            solution_stack = [DFPrefix(MyPrefix)]
         else:
             solution_stack = [DFPrefix(random.choice(All_Characters))]
 

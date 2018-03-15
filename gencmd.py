@@ -14,4 +14,5 @@ if os.getenv('BFS'): pychains.execfile.InitiateBFS = os.getenv('BFS') == 'true'
 import sys
 pychains.execfile.Load = os.getenv('LOAD')
 pychains.execfile.Dump = os.getenv('DUMP')
+pychains.execfile.PrefixArg = os.getenv('PREFIX')
 pychains.execfile.ExecFile().cmdline(sys.argv)

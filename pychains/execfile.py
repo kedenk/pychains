@@ -45,14 +45,13 @@ WeightedGeneration=True
 
 All_Characters = list(string.printable + string.whitespace)
 CmpSet = [Op.EQ, Op.NE, Op.IN, Op.NOT_IN]
+PrefixArg = None
 
 def log(var, i=1):
     if Debug >= i: print(repr(var), file=sys.stderr, flush=True)
 
-def brk(v=True):
-    if not v: return None
-    import pudb
-    pudb.set_trace()
+import pudb
+brk =  pudb.set_trace
 
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
@@ -402,7 +401,10 @@ class ExecFile(bex.ExecFile):
         env['int'] = my_int
         env['float'] = my_float
 
-        p = Prefix(random.choice(All_Characters))
+        if PrefixArg:
+            p = Prefix(PrefixArg)
+        else:
+            p = Prefix(random.choice(All_Characters))
         self.apply_prefix(p)
 
         for i in range(self.start_i, MaxIter):
@@ -412,6 +414,11 @@ class ExecFile(bex.ExecFile):
             try:
                 log(">> %s" % self.sys_args(), 0)
                 v = vm.run_code(code, f_globals=env)
+                if PrefixArg:
+                    chars = [o for o in vm.cmp_trace if hasattr(o.opA, 'x')] # these are tstrs.
+                    chars = sorted(chars, key=lambda x: x.opA.x())
+                    for o in chars:
+                        print("%d,%s,%s,%s" % (o.opA.x(), repr(str(o.opA)), repr(o.opB), o.opnum))
                 print('Arg: %s' % repr(self.sys_args()))
                 if random.uniform(0,1) > Return_Probability:
                     continue

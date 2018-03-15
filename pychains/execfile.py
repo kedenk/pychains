@@ -8,7 +8,7 @@ import logging
 import bytevm.execfile as bex
 import enum
 
-import dataparser as dp
+from pycore import dataparser as dp
 from .vm import TrackerVM, Op
 from .tstr import tstr
 from .exec_bfs import exec_code_object_bfs
@@ -407,6 +407,8 @@ class ExecFile(bex.ExecFile):
             p = Prefix(random.choice(All_Characters))
         self.apply_prefix(p)
 
+        self.cmp_output = []
+
         for i in range(self.start_i, MaxIter):
             self.start_i = i
             if Dump: self.dump()
@@ -418,7 +420,7 @@ class ExecFile(bex.ExecFile):
                     chars = [o for o in vm.cmp_trace if hasattr(o.opA, 'x')] # these are tstrs.
                     chars = sorted(chars, key=lambda x: x.opA.x())
                     for o in chars:
-                        print("%d,%s,%s,%s" % (o.opA.x(), repr(str(o.opA)), repr(o.opB), o.opnum))
+                        self.cmp_output.append(o)
                 print('Arg: %s' % repr(self.sys_args()))
                 if random.uniform(0,1) > Return_Probability:
                     continue

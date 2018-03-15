@@ -7,7 +7,7 @@
 
 # std
 import math
-import io
+import myio as io
 import types
 
 
@@ -47,13 +47,14 @@ class JSONError(Exception):
         Exception.__init__(self, msg)
 
 
-class JSONStream(object):
+class JSONStream:
 
     # no longer inherit directly from StringIO, since we only want to
     # expose the methods below and not allow direct access to the
     # underlying stream.
 
     def __init__(self, data):
+        self._tstr = data
         self._stm = io.StringIO(data)
 
     @property
@@ -79,18 +80,30 @@ class JSONStream(object):
             self.next()
 
     def next(self, size=1):
-        return self._stm.read(size)
+        v = self._stm.read(size)
+        self._tstr = self._tstr[size:]
+        return v
 
     def next_ord(self):
         return ord(next(self))
 
     def peek(self):
         if self.pos == self.len:
-            return ''
+            return self.getvalue()[self.pos:]
         return self.getvalue()[self.pos]
 
     def substr(self, pos, length):
         return self.getvalue()[pos:pos+length]
+
+    #@property
+    #def _tstr(self):
+    #    return self._stm._tstr
+
+    def __str__(self):
+        return str(self._tstr)
+
+    def __repr__(self):
+        return "J" + str(self._tstr)
 
 
 def _decode_utf8(c0, stm):
@@ -135,28 +148,29 @@ def decode_escape(c, stm):
 def _from_json_string(stm):
     # skip over '"'
     stm.next()
-    r = []
+    r = ''
     while True:
         c = stm.next()
         if c == '':
             raise JSONError(E_TRUNC, stm, stm.pos - 1)
         elif c == '\\':
             c = stm.next()
-            r.append(decode_escape(c, stm))
+            r += decode_escape(c, stm)
         elif c == '"':
-            return ''.join(r)
+            return r
         elif c > '\x7f':
-            r.append(_decode_utf8(c, stm))
+            r += _decode_utf8(c, stm)
         else:
-            r.append(c)
+            r += c
 
 
 def _from_json_fixed(stm, expected, value, errmsg):
     off = len(expected)
     pos = stm.pos
-    if stm.substr(pos, off) == expected:
+    res = stm.substr(pos, off)
+    if res == expected:
         stm.next(off)
-        return value
+        return res
     raise JSONError(errmsg, stm, pos)
 
 
@@ -183,8 +197,8 @@ def _from_json_number(stm):
 
     s = stm.substr(pos, stm.pos - pos)
     if is_float:
-        return float(s)
-    return int(s)
+        return s
+    return s
 
 
 def _from_json_list(stm):
@@ -377,8 +391,8 @@ def to_json(obj):
 decode = from_json
 encode = to_json
 
-def main(str):
-    print(from_json(str))
+def main(s):
+    return from_json(s)
 
 if __name__ == '__main__':
     import sys

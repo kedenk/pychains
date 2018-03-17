@@ -19,7 +19,7 @@ MaxIter = 100000
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
-Return_Probability = 0.01
+Return_Probability = 1.0
 
 # The sampling distribution from which the characters are chosen.
 Distribution='U'
@@ -38,7 +38,7 @@ Pickled = '.pickle/ExecFile-%s.pickle'
 
 Track = True
 
-InitiateBFS = False
+InitiateBFS = True
 
 Debug=1
 
@@ -93,13 +93,14 @@ def save_trace(traces, i, file='trace'):
     with open('.t/%s-%d.txt' % (file,i), 'w+') as f:
         for i in traces: print(i, file=f)
 
+Fix_Chars = {}
+
 class Prefix:
-    def __init__(self, myarg, fixes=[], bfs=False):
+    def __init__(self, myarg, bfs=False):
         if type(myarg) is not tainted.tstr:
             self.my_arg = create_arg(myarg)
         else:
             self.my_arg = myarg
-        self.fixes = fixes
         self.bfs = bfs
 
     def __repr__(self):
@@ -108,7 +109,7 @@ class Prefix:
     def solve(self, my_traces, i):
         raise NotImplemnted
 
-    def create_prefix(self, myarg, fixes=[]):
+    def create_prefix(self, myarg):
         # should be overridden in child classes
         raise NotImplemnted
 
@@ -121,8 +122,8 @@ class DFPrefix(Prefix):
         if  random.uniform(0,1) > Return_Probability:
             return [self.create_prefix(str(self.my_arg) + random.choice(All_Characters))]
 
-    def create_prefix(self, myarg, fixes=[]):
-        return DFPrefix(myarg, fixes, self.bfs)
+    def create_prefix(self, myarg):
+        return DFPrefix(myarg, self.bfs)
 
     def best_matching_str(self, elt, lst):
         largest, lelt = '', None
@@ -241,8 +242,18 @@ class DFPrefix(Prefix):
     def solve(self, my_traces, i):
         traces = list(reversed(my_traces))
         arg_prefix = self.my_arg
-        fixes = self.fixes
         last_char_added = arg_prefix[-1]
+        if len(last_char_added) != 0:
+            if last_char_added.x() not in Fix_Chars:
+                Fix_Chars[last_char_added.x()] = set()
+            Fix_Chars[last_char_added.x()].add(str(last_char_added))
+
+        to_del = []
+        for i in Fix_Chars:
+            if i > last_char_added.x(): to_del.append(i)
+        for i in to_del: del Fix_Chars[i]
+
+        fixes = Fix_Chars[last_char_added.x()]
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
         while traces:
@@ -265,8 +276,20 @@ class DFPrefix(Prefix):
                     corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
                     if not corr: raise Exception('Exhausted attempts: %s' % fixes)
                 else:
-                    corr = self.get_corrections(cmp_stack, lambda i: True)
-                    fixes = []
+                    if cmp_stack:
+                        corr = self.get_corrections(cmp_stack, lambda i: True)
+                    else:
+                        # possibly a space added, and stripped. We act as a trim.
+                        end =  h.op_A.x()
+                        if end in Fix_Chars:
+                            fixes = Fix_Chars[end]
+                        else:
+                            fixes = []
+                        args = sprefix[:end] + random.choice([i for i in All_Characters if i not in fixes])
+
+                        # we already know the result for next character
+                        sols = [self.create_prefix(args)]
+                        return sols
 
                 # check for line cov here.
                 prefix = sprefix[:-1]
@@ -275,17 +298,21 @@ class DFPrefix(Prefix):
                 chars = chars if WeightedGeneration else sorted(set(chars))
                 for new_char in chars:
                     arg = "%s%s" % (prefix, new_char)
-                    sols.append(self.create_prefix(arg, fixes))
+                    sols.append(self.create_prefix(arg))
 
                 return sols
             elif k == EState.Trim:
                 # we need to (1) find where h.op_A._idx is within
                 # sys_args, and trim sys_args to that location, and
                 # add a new character.
-                fix =  [sprefix[h.op_A.x()]]
-                args = sprefix[:h.op_A.x()] + random.choice([i for i in All_Characters if i != fix[0]])
+                end =  h.op_A.x()
+                if end in Fix_Chars:
+                    fixes = Fix_Chars[end]
+                else:
+                    fixes = []
+                args = sprefix[:h.op_A.x()] + random.choice([i for i in All_Characters if i not in fixes])
                 # we already know the result for next character
-                sols = [self.create_prefix(args, fix)]
+                sols = [self.create_prefix(args)]
                 return sols # VERIFY - TODO
 
             elif k == EState.String:

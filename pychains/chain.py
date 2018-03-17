@@ -119,7 +119,7 @@ class DFPrefix(Prefix):
 
     def continue_valid(self):
         if  random.uniform(0,1) > Return_Probability:
-            return [self.create_prefix(self.my_arg + random.choice(All_Characters))]
+            return [self.create_prefix(str(self.my_arg) + random.choice(All_Characters))]
 
     def create_prefix(self, myarg, fixes=[]):
         return DFPrefix(myarg, fixes, self.bfs)

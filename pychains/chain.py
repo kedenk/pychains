@@ -4,8 +4,8 @@ import string
 import enum
 import sys
 
-import tainted
-from tainted import Op, tstr
+import taintedstr as tainted
+from taintedstr import Op, tstr
 
 RandomSeed = int(os.getenv('R') or '0')
 

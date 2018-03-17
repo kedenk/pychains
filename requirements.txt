@@ -3,3 +3,4 @@ pudb
 exrex
 #-e git://github.com/vrthra/bytevm#egg=bytevm
 -e ../bytevm
+-e ../taintedstr

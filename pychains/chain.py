@@ -15,11 +15,11 @@ import random
 random.seed(RandomSeed)
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = 10000
+MaxIter = 100000
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
-Return_Probability = 1.0
+Return_Probability = 0.01
 
 # The sampling distribution from which the characters are chosen.
 Distribution='U'
@@ -42,7 +42,7 @@ InitiateBFS = False
 
 Debug=1
 
-Log_Comparisons = 1
+Log_Comparisons = 0
 
 WeightedGeneration=False
 
@@ -136,25 +136,25 @@ class DFPrefix(Prefix):
         last_char_added = arg_prefix[-1]
         o = h.op
 
-        if o in [Op.EQ, Op.NE] and isinstance(h.opB, str) and len(h.opB) > 1 and h.opA.x() == last_char_added.x():
+        if o in [Op.EQ, Op.NE] and isinstance(h.op_B, str) and len(h.op_B) > 1 and h.op_A.x() == last_char_added.x():
             # Dont add IN and NOT_IN -- '0' in '0123456789' is a common
             # technique in char comparision to check for digits
             # A string comparison rather than a character comparison.
             return (1, EState.String, h)
 
-        elif o in CmpSet and isinstance(h.opB, list) and max([len(opB) in h.opB]) > 1 and h.opA.x() == last_char_added.x():
+        elif o in CmpSet and isinstance(h.op_B, list) and max([len(b) for b in h.op_B]) > 1 and h.op_A.x() == last_char_added.x():
             # A string comparison rather than a character comparison.
             return (1, EState.String, h)
 
-        elif h.opA.x() == last_char_added.x():
+        elif h.op_A.x() == last_char_added.x():
             # A character comparison of the *last* char.
             return (1, EState.Char, h)
 
-        elif h.opA.x() == len(arg_prefix):
+        elif h.op_A.x() == len(arg_prefix):
             # An empty comparison at the EOF
             return (1, EState.EOF, h)
 
-        elif len(h.opA) == 1 and h.opA.x() != last_char_added.x():
+        elif len(h.op_A) == 1 and h.op_A.x() != last_char_added.x():
             # An early validation, where the comparison goes back to
             # one of the early chars. Imagine when we use regex /[.0-9+-]/
             # for int, and finally validate it with int(mystr)
@@ -180,15 +180,15 @@ class DFPrefix(Prefix):
         cmp_stack = []
         check = False
         for i, t in enumerate(cmp_traces):
-            if not len(t.opA) == 1: continue
-            if h.opA.x() != t.opA.x(): break
+            if not len(t.op_A) == 1: continue
+            if h.op_A.x() != t.op_A.x(): break
             cmp_stack.append((i, t))
         return cmp_stack
 
     def extract_solutions(self, elt, lst_solutions, flip=False):
         fn = tainted.COMPARE_OPERATORS[elt.op]
-        result = fn(str(elt.opA), str(elt.opB))
-        if isinstance(elt.opB, str) and len(elt.opB) == 0:
+        result = fn(str(elt.op_A), str(elt.op_B))
+        if isinstance(elt.op_B, str) and len(elt.op_B) == 0:
             if Op(elt.op) in [Op.EQ, Op.NE]:
                 return lst_solutions
             else:
@@ -196,9 +196,9 @@ class DFPrefix(Prefix):
         else:
             myfn = fn if not flip else lambda a, b: not fn(a, b)
             if result:
-                lst = [c for c in lst_solutions if myfn(str(c), str(elt.opB))]
+                lst = [c for c in lst_solutions if myfn(str(c), str(elt.op_B))]
             else:
-                lst = [c for c in lst_solutions if not myfn(str(c), str(elt.opB))]
+                lst = [c for c in lst_solutions if not myfn(str(c), str(elt.op_B))]
             return lst
 
     def get_lst_solutions_at_divergence(self, cmp_stack, v):
@@ -210,11 +210,11 @@ class DFPrefix(Prefix):
             diverge, *satisfy = cmp_stack[v:]
             lst_solutions = All_Characters
             for i,elt in reversed(satisfy):
-                # assert elt.opA == self.last_char_added()
+                # assert elt.op_A == self.last_char_added()
                 lst_solutions = self.extract_solutions(elt, lst_solutions, False)
             # now we need to diverge here
             i, elt = diverge
-            # assert elt.opA == self.last_char_added()
+            # assert elt.op_A == self.last_char_added()
             lst_solutions = self.extract_solutions(elt, lst_solutions, True)
             if lst_solutions:
                 return lst_solutions
@@ -250,7 +250,7 @@ class DFPrefix(Prefix):
             o = h.op
 
             idx, k, info = self.parsing_state(h, arg_prefix)
-            log((RandomSeed, i, idx, k, info, "is tainted", isinstance(h.opA, tainted.tstr)), 1)
+            log((RandomSeed, i, idx, k, info, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
             sprefix = str(arg_prefix)
 
             if k == EState.Char:
@@ -260,7 +260,7 @@ class DFPrefix(Prefix):
                 # first comparison that was made otherwise.
                 # Now, try to fix the last failure
                 cmp_stack = self.comparisons_on_last_char(h, traces)
-                if str(h.opA) == last_char_added and o in CmpSet:
+                if str(h.op_A) == last_char_added and o in CmpSet:
                     # Now, try to fix the last failure
                     corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
                     if not corr: raise Exception('Exhausted attempts: %s' % fixes)
@@ -279,25 +279,28 @@ class DFPrefix(Prefix):
 
                 return sols
             elif k == EState.Trim:
-                # we need to (1) find where h.opA._idx is within
+                # we need to (1) find where h.op_A._idx is within
                 # sys_args, and trim sys_args to that location, and
                 # add a new character.
-                fix =  [sprefix[h.opA.x()]]
-                args = sprefix[:h.opA.x()] + random.choice([i for i in All_Characters if i != fix[0]])
+                fix =  [sprefix[h.op_A.x()]]
+                args = sprefix[:h.op_A.x()] + random.choice([i for i in All_Characters if i != fix[0]])
                 # we already know the result for next character
                 sols = [self.create_prefix(args, fix)]
                 return sols # VERIFY - TODO
 
             elif k == EState.String:
                 if o in [Op.IN, Op.NOT_IN]:
-                    opB = self.best_matching_str(str(h.opA), [str(i) for i in h.opB])
+                    opB = self.best_matching_str(str(h.op_A), [str(i) for i in h.op_B])
                 elif o in [Op.EQ, Op.NE]:
-                    opB = str(h.opB)
+                    opB = str(h.op_B)
                 else:
                     assert False
-                common = os.path.commonprefix([str(h.opA), opB])
-                assert str(h.opB)[len(common)-1] == last_char_added
-                arg = "%s%s" % (sprefix, str(h.opB)[len(common):])
+                common = os.path.commonprefix([str(h.op_A), opB])
+                # assert str(opB)[len(common)-1] == last_char_added
+                if not common:
+                    arg = "%s%s" % ('', str(opB)[len(common):])
+                else:
+                    arg = "%s%s" % (sprefix, str(opB)[len(common):])
                 sols = [self.create_prefix(arg)]
                 return sols
             elif k == EState.EOF:
@@ -510,7 +513,7 @@ class Chain:
 
     def log_comparisons(self):
         if Log_Comparisons:
-            for c in tainted.Comparisons: print("%d,%s" % (c.opA.x(), repr(c)))
+            for c in tainted.Comparisons: print("%d,%s" % (c.op_A.x(), repr(c)))
 
     def prune(self, solutions):
         # never retry an argument.

@@ -38,7 +38,7 @@ Pickled = '.pickle/ExecFile-%s.pickle'
 
 Track = True
 
-InitiateBFS = True
+InitiateBFS = False
 
 Debug=1
 

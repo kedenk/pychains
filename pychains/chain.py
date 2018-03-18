@@ -93,7 +93,7 @@ def save_trace(traces, i, file='trace'):
     with open('.t/%s-%d.txt' % (file,i), 'w+') as f:
         for i in traces: print(i, file=f)
 
-Fix_Chars = {}
+Seen_Prefixes = set()
 
 class Prefix:
     def __init__(self, myarg, bfs=False):
@@ -243,17 +243,8 @@ class DFPrefix(Prefix):
         traces = list(reversed(my_traces))
         arg_prefix = self.my_arg
         last_char_added = arg_prefix[-1]
-        if len(last_char_added) != 0:
-            if last_char_added.x() not in Fix_Chars:
-                Fix_Chars[last_char_added.x()] = set()
-            Fix_Chars[last_char_added.x()].add(str(last_char_added))
-
-        to_del = []
-        for i in Fix_Chars:
-            if i > last_char_added.x(): to_del.append(i)
-        for i in to_del: del Fix_Chars[i]
-
-        fixes = Fix_Chars[last_char_added.x()]
+        # add the prefix to seen.
+        Seen_Prefixes.add(str(arg_prefix))
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
         while traces:
@@ -265,6 +256,10 @@ class DFPrefix(Prefix):
             sprefix = str(arg_prefix)
 
             if k == EState.Char:
+                end =  h.op_A.x()
+                similar = [i for i in Seen_Prefixes if str(arg_prefix[:-1]) in i and len(i) >= len(arg_prefix)]
+                fixes = [i[end] for i in similar]
+
                 # A character comparison of the *last* char.
                 # This was a character comparison. So collect all
                 # comparisons made using this character. until the
@@ -281,10 +276,7 @@ class DFPrefix(Prefix):
                     else:
                         # possibly a space added, and stripped. We act as a trim.
                         end =  h.op_A.x()
-                        if end in Fix_Chars:
-                            fixes = Fix_Chars[end]
-                        else:
-                            fixes = []
+                        fixes = [i[end] for i in similar]
                         args = sprefix[:end] + random.choice([i for i in All_Characters if i not in fixes])
 
                         # we already know the result for next character
@@ -306,10 +298,9 @@ class DFPrefix(Prefix):
                 # sys_args, and trim sys_args to that location, and
                 # add a new character.
                 end =  h.op_A.x()
-                if end in Fix_Chars:
-                    fixes = Fix_Chars[end]
-                else:
-                    fixes = []
+
+                similar = [i for i in Seen_Prefixes if str(arg_prefix[:end]) in i]
+                fixes = [i[end] for i in similar]
                 args = sprefix[:h.op_A.x()] + random.choice([i for i in All_Characters if i not in fixes])
                 # we already know the result for next character
                 sols = [self.create_prefix(args)]

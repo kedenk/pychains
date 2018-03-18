@@ -51,7 +51,9 @@ class URL:
         # Get the protocol handler if not specified or the protocol
         # of the context could not be used
         i = spec.find('#', start)
-        (protocol, host, port, authority, userInfo, path, query), j =  self.parseURL(spec, start, limit if i < 0 else i)
+        v = limit if i < 0 else i
+        newspec = spec[start:v]
+        (protocol, host, port, authority, userInfo, path) =  self.parseURL(newspec)
         i = spec.find('#', start)
         ref = None
         if i >= 0:
@@ -61,12 +63,13 @@ class URL:
         # Strip off the query part
         queryStart = spec.find('?')
         queryOnly = queryStart == start
+        query=''
         if (queryStart != -1):
              query = spec[queryStart+1:limit]
         self.setURL(protocol, host, port, authority, userInfo, path, query, ref)
 
 
-    def parseURL(self, spec, start, limit):
+    def parseURL(self, spec):
         protocol = self.protocol
         authority = self.authority
         userInfo = self.userInfo
@@ -77,10 +80,12 @@ class URL:
 
         isRelPath = False
         queryOnly = False
+        start = 0
+        limit = len(spec)
 
         if start < limit:
             queryStart = spec.find('?')
-            if limit > queryStart:
+            if queryStart != -1 and limit > queryStart:
                 limit = queryStart
 
         i = 0
@@ -174,7 +179,7 @@ class URL:
         if not path:
             path = ""
 
-        return (protocol, host, port, authority, userInfo, path, query), start
+        return (protocol, host, port, authority, userInfo, path)
 
 
     def setURL(self, protocol, host, port, authority, userInfo, path, query, ref):
@@ -216,6 +221,7 @@ class URL:
             elif c not in (mystring.ascii_letters + mystring.digits) and c != '.' and c != '+' and c != '-' :
                 raise Exception("no protocol: "+spec)
             i += 1
+        raise Exception("no protocol: "+spec)
 
     def __repr__(self):
         try:

@@ -266,7 +266,7 @@ class DFPrefix(Prefix):
                 # first comparison that was made otherwise.
                 # Now, try to fix the last failure
                 cmp_stack = self.comparisons_on_last_char(h, traces)
-                if str(h.op_A) == last_char_added and o in CmpSet:
+                if str(h.op_A) == str(last_char_added) and o in CmpSet:
                     # Now, try to fix the last failure
                     corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
                     if not corr: raise Exception('Exhausted attempts: %s' % fixes)

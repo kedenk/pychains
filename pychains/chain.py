@@ -389,13 +389,17 @@ class BFSPrefix(Prefix):
     # for inputs with length greater 3 we can assume that if
     # it ends with a value which was not successful for a small input
     def _prune_input(self, node):
+        global string_literals
         s = node.get_substituted_string()
         # we do not need to create arbitrarily long strings, such a thing will
         # likely end in an infinite string, so we prune branches starting here
-        if "BBBA" in str(node.get_next_input()):
-            return True
         if len(s) <= 3:
             return False
+        for banned in string_literals:
+            if banned in s:
+                return True
+        if "BBBA" in str(node.get_next_input()):
+            return True
         # print(repr(s), repr(s[0:len(s) // 2]), repr(s[len(s) // 2:]))
         if s[len(s) // 2:].endswith(s[0:len(s) // 2]):
             return True
@@ -764,6 +768,8 @@ class Chain:
             if Dump: self.dump()
             tainted.Comparisons = []
             try:
+                log("Executed: " + str(i))
+                log("Stacksize: " + str(len(solution_stack)))
                 log(">> %s" % self.sys_args(), 1)
                 # sys.settrace(traceit)
                 v = fn(self.sys_args())
@@ -792,9 +798,13 @@ class Chain:
                         raise Exception('No suitable continuation found')
                     solution_stack = [self.current_prefix.create_prefix(new_arg)]
 
+#strings that are not allowed in the input
+string_literals = set()
+
 
 # TODO those regexes are not perfect, we might want to work on the AST instead
 def refactor(code : str):
+    global string_literals
     code = "from tainted import tstr\n" + code
     offset = 0
     # print(re.findall(r'""".*?"""',code,flags=re.DOTALL))
@@ -802,7 +812,9 @@ def refactor(code : str):
 
     offset = 0
     for match in (re.finditer(r'(?![a-zA-Z0-9_])str\(.*?\)', code)):
-        code = code[ :offset + match.regs[0][0]] + "tstr(" + code[offset + match.regs[0][0]:offset + match.regs[0][1]] + ")" + code[offset + match.regs[0][1]: ]
+        string_literal = code[offset + match.regs[0][0]:offset + match.regs[0][1]]
+        add_string_literal(string_literal)
+        code = code[ :offset + match.regs[0][0]] + "tstr(" + string_literal + ")" + code[offset + match.regs[0][1]:]
         offset += len("tstr()")
     # print(code)
 
@@ -814,7 +826,9 @@ def refactor(code : str):
         (?<!\\)    # not preceded by a backslash
         "          # a literal double-quote
         ''', code)):
-        code = code[ :offset + match.regs[0][0]] + "tstr(" + code[offset + match.regs[0][0]:offset + match.regs[0][1]] + ")" + code[offset + match.regs[0][1]: ]
+        string_literal = code[offset + match.regs[0][0]:offset + match.regs[0][1]]
+        add_string_literal(string_literal)
+        code = code[ :offset + match.regs[0][0]] + "tstr(" + string_literal + ")" + code[offset + match.regs[0][1]:]
         offset += len("tstr()")
 
     offset = 0
@@ -825,7 +839,9 @@ def refactor(code : str):
         (?<!\\)    # not preceded by a backslash
         '          # a literal double-quote
         """, code)):
-        code = code[ :offset + match.regs[0][0]] + "tstr(" + code[offset + match.regs[0][0]:offset + match.regs[0][1]] + ")" + code[offset + match.regs[0][1]: ]
+        string_literal = code[offset + match.regs[0][0]:offset + match.regs[0][1]]
+        add_string_literal(string_literal)
+        code = code[ :offset + match.regs[0][0]] + "tstr(" + string_literal + ")" + code[offset + match.regs[0][1]:]
         offset += len("tstr()")
 
 
@@ -835,10 +851,28 @@ def refactor(code : str):
     return code
 
 
+#helper function to collect all string literals in the code, filter by certain constraints
+def add_string_literal(string_literal:str):
+    global string_literals
+    string_literal = string_literal.replace("'", "").replace('"', '')
+    if len(string_literal) > 1 and string_literal.isalpha():
+        string_literals.add(string_literal)
+
+
+def make_string_literal_superset():
+    global string_literals
+    new_literals = set()
+    for s1 in string_literals:
+        for s2 in string_literals:
+            new_literals.add(s1+s2)
+    string_literals = new_literals
+
+
 if __name__ == '__main__':
     import imp
     arg = sys.argv[1]
     refac = refactor(open(arg,"r").read())
+    make_string_literal_superset()
     _mod = imp.load_source('mymod', "module.py")
     e = Chain()
     e.exec_argument(_mod.main)

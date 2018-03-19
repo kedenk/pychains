@@ -22,7 +22,7 @@ def o(d='', var=None, i=1):
     if config.Debug >= i: print(d, repr(var) if var else '', file=sys.stdout, flush=True)
 
 import pudb
-brk = pudb.set_trace()
+brk = pudb.set_trace
 
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
@@ -159,7 +159,7 @@ class DFPrefix(Prefix):
         while traces:
             h, *ltrace = traces
             k = self.parsing_state(h, arg_prefix)
-            log((RandomSeed, i, k, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
+            log((config.RandomSeed, i, k, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
             sprefix = str(arg_prefix)
 
             if k == EState.Trim:
@@ -429,7 +429,7 @@ class Chain:
             except Exception as e:
                 self.seen.add(repr(self.current_prefix.my_arg))
                 log('Exception %s' % e)
-                if i == MaxIter//100 and config.InitiateBFS:
+                if i == config.MaxIter//100 and config.InitiateBFS:
                     print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True)
                     self.arg_at_bfs = self.current_prefix.my_arg
                     if config.Aggressive:

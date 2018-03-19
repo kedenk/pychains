@@ -1,4 +1,3 @@
-import pickle
 import os.path
 import string
 import enum
@@ -40,11 +39,6 @@ class EState(enum.Enum):
     Append = enum.auto()
     # -
     Unknown = enum.auto()
-
-def save_trace(traces, i, file='trace'):
-    if not config.Debug: return None
-    with open('.t/%s-%d.txt' % (file,i), 'w+') as f:
-        for i in traces: print(i, file=f)
 
 Seen_Prefixes = set()
 
@@ -253,24 +247,6 @@ class Chain:
 
     def sys_args(self):
         return self._my_args[-1]
-
-    # Load the pickled state and also set the random set.
-    # Used to start execution at arbitrary iterations.
-    # requires prior dump
-    def load(self, i):
-        with open(config.Pickled % i, 'rb') as f:
-            self.__dict__ = pickle.load(f)
-            random.setstate(self.rstate)
-
-    # Save the execution states at each iteration.
-    def dump(self):
-        with open(config.Pickled % self.start_i, 'wb') as f:
-            self.rstate = random.getstate()
-            pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
-
-    def choose_prefix(self, solutions):
-        prefix = random.choice(solutions)
-        return prefix
 
     def apply_prefix(self, prefix):
         self.current_prefix = prefix

@@ -78,14 +78,6 @@ class DFPrefix(Prefix):
     def create_prefix(self, myarg):
         return DFPrefix(myarg, self.bfs)
 
-    def best_matching_str(self, elt, lst):
-        largest, lelt = '', None
-        for e in lst:
-            common = os.path.commonprefix([elt, e])
-            if len(common) > len(largest):
-                largest, lelt = common, e
-        return largest, lelt
-
     def parsing_state(self, h, arg_prefix):
         if h.op_A.x() == len(arg_prefix): return EState.Append
         elif len(h.op_A) == 1: return EState.Trim
@@ -205,12 +197,11 @@ class BFPrefix(DFPrefix):
         return BFPrefix(myarg, self.bfs)
 
     def solve(self, my_traces, i):
+        # Fast predictive solutions. Use only known characters to fill in when
+        # possible.
         traces = list(reversed(my_traces))
         arg_prefix = self.my_arg
-        # add the prefix to seen.
         Seen_Prefixes.add(str(arg_prefix))
-        # we are assuming a character by character comparison.
-        # so get the comparison with the last element.
         sols = []
         while traces:
             h, *ltrace = traces
@@ -225,19 +216,15 @@ class BFPrefix(DFPrefix):
 
             cmp_stack = self.comparisons_on_given_char(h, traces)
 
-            corr = []
-            for i, t in cmp_stack:
-                opB = [t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
-                for o in opB:
-                    if o in fixes: continue
-                    if not o: continue
-                    corr.append(o)
+            opBs = [[t.opB] if t.op in [Op.EQ, Op.NE] else t.opB for i, t in cmp_stack]
+            corr = [i for i in sum(opBs, []) if i and i not in fixes]
 
             if k == EState.Trim:
                 if not corr:
                     return sols
             elif k == EState.Append:
                 if not corr:
+                    # last resort. Use random fill in
                     sols.append(self.create_prefix("%s%s" % (sprefix,random.choice(All_Characters))))
                     traces = [i for i in traces if len(i.opA) == 1]
                     continue

@@ -15,7 +15,7 @@ random.seed(RandomSeed)
 
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = 10000
+MaxIter = 10000000
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
@@ -374,6 +374,7 @@ class BFSPrefix(Prefix):
         # prune_input for more information)
         for node in list(solutions):
             if self._prune_input(node):
+                # log("Pruned: " + str(node))
                 solutions.remove(node)
             elif self._check_seen(BFSPrefix.already_seen, node):
                 solutions.remove(node)
@@ -418,9 +419,8 @@ class BFSPrefix(Prefix):
             for i in range(0, len(cmp_trace)):
                 cmp = cmp_trace[i]
                 init = initial_trace[i]
-                if str(cmp) != str(init):
-                    if not self._compare_predicates_in_detail(cmp, init):
-                        return False
+                if not self._compare_predicates_in_detail(cmp, init):
+                    return False
         return True
 
     # checks if two predicates are equal for some special cases like in or
@@ -432,8 +432,23 @@ class BFSPrefix(Prefix):
             if cmp.op in [Op.SPLIT_STR, Op.FIND_STR]:
                 return str(cmp.opA[-1]) == str(cmp.opA[-1])
             if cmp.op in [Op.IN, Op.NOT_IN]:
-                return False
+                cmp_val = self.getCompareToValue(cmp)
+                init_val = self.getCompareToValue(init)
+                return cmp_val == init_val
+            if cmp.op in [Op.EQ, Op.NE]:
+                cmp_val = self.getCompareToValue(cmp)
+                init_val = self.getCompareToValue(init)
+                return cmp_val == init_val
         return False
+
+    # return the value of the compare operation to which the tainted string is compared to
+    def getCompareToValue(self, instr):
+        if type(instr.opA) == tainted.tstr and instr.opA._idx == -1:
+            return str(instr.opA)
+        elif type(instr.opB) == tainted.tstr and instr.opB._idx == -1:
+            return str(instr.opB)
+        else:
+            return None
 
     # check if the input is already in the queue, if yes one can just prune it
     # at this point
@@ -740,7 +755,7 @@ class Chain:
         solution_stack = [DFPrefix(random.choice(All_Characters))]
         # solution_stack = [DFPrefix("(-12 + ( pi * ")]
         # solution_stack = [DFPrefix("{\"asd\":[ ")]
-        # solution_stack = [DFPrefix("A")]
+        solution_stack = [DFPrefix("A")]
 
         for i in range(self.start_i, MaxIter):
             my_prefix, *solution_stack = solution_stack
@@ -766,7 +781,8 @@ class Chain:
                 traces = tainted.Comparisons
                 tracelength = len(traces)
                 solutions = self.current_prefix.solve(traces, i)
-                solution_stack += self.current_prefix.prune(solutions, fn)
+                new_solutions = self.current_prefix.prune(solutions, fn)
+                solution_stack += new_solutions
                 # assert tracelength == len(traces)
 
                 if not solution_stack:
@@ -792,7 +808,7 @@ def refactor(code : str):
 
     offset = 0
     for match in (re.finditer(r'''(?x)   # verbose mode
-        (?<!\\)    # not preceded by a backslash
+        (?<![\\,r,b])    # not preceded by a backslash
         "          # a literal double-quote
         .*?        # 1-or-more characters
         (?<!\\)    # not preceded by a backslash
@@ -803,7 +819,7 @@ def refactor(code : str):
 
     offset = 0
     for match in (re.finditer(r"""(?x)   # verbose mode
-        (?<!\\)    # not preceded by a backslash
+        (?<![\\,r,b])    # not preceded by a backslash
         '          # a literal double-quote
         .*?        # 1-or-more characters
         (?<!\\)    # not preceded by a backslash

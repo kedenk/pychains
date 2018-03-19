@@ -6,85 +6,43 @@ import sys
 
 import taintedstr as tainted
 from taintedstr import Op, tstr
-
-RandomSeed = int(os.getenv('R') or '0')
-
-MyPrefix = os.getenv('MY_PREFIX') or None
+from . import config
 
 import random
-random.seed(RandomSeed)
-
-#  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = 100000
-
-# When we get a non exception producing input, what should we do? Should
-# we return immediately or try to make the input larger?
-Return_Probability =  float(os.getenv('MY_RP') or '1.0')
-
-# The sampling distribution from which the characters are chosen.
-Distribution='U'
-
-Aggressive = True
-
-# We can choose to load the state at some iteration if we had dumped the
-# state in prior execution.
-Load = 0
-
-# Dump the state (a pickle)
-Dump = False
-
-# Where to pickle
-Pickled = '.pickle/ExecFile-%s.pickle'
-
-Track = True
-
-InitiateBFS = False
-
-Debug=1
-
-Log_Comparisons = 0
-
-WeightedGeneration=False
+random.seed(config.RandomSeed)
 
 All_Characters = list(string.printable)
 
 CmpSet = [Op.EQ, Op.NE, Op.IN, Op.NOT_IN]
 
-Comparison_Equality_Chain = 3
-
 def log(var, i=1):
-    if Debug >= i: print(repr(var), file=sys.stderr, flush=True)
+    if config.Debug >= i: print(repr(var), file=sys.stderr, flush=True)
 
 def o(d='', var=None, i=1):
-    if Debug >= i: print(d, repr(var) if var else '', file=sys.stdout, flush=True)
+    if config.Debug >= i: print(d, repr(var) if var else '', file=sys.stdout, flush=True)
 
-def brk(v=True):
-    if not v: return None
-    import pudb
-    pudb.set_trace()
+import pudb
+brk = pudb.set_trace()
 
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
 def create_arg(s):
-    if Track:
+    if config.Track:
         return tainted.tstr(s)
     else:
         return s
 
 class EState(enum.Enum):
-
     # A char comparison made using a previous character
     Trim = enum.auto()
-
     # End of string as found using tainting or a comparison with the
     # empty string
     EOF = enum.auto()
-
     # -
     Unknown = enum.auto()
 
 def save_trace(traces, i, file='trace'):
-    if not Debug: return None
+    if not config.Debug: return None
     with open('.t/%s-%d.txt' % (file,i), 'w+') as f:
         for i in traces: print(i, file=f)
 
@@ -114,7 +72,7 @@ class Prefix:
 class DFPrefix(Prefix):
 
     def continue_valid(self):
-        if  random.uniform(0,1) > Return_Probability:
+        if  random.uniform(0,1) > config.Return_Probability:
             return [self.create_prefix(str(self.my_arg) + random.choice(All_Characters))]
 
     def create_prefix(self, myarg):
@@ -129,40 +87,11 @@ class DFPrefix(Prefix):
         return largest, lelt
 
     def parsing_state(self, h, arg_prefix):
-        last_char_added = arg_prefix[-1]
-        o = h.op
-
-        if h.op_A.x() == len(arg_prefix):
-            # An empty comparison at the EOF
-            return (1, EState.EOF, h)
-
-        elif h.op_A.x() == last_char_added.x():
-            # A character comparison of the *last* char.
-            return (1, EState.Trim, h)
-
-        elif len(h.op_A) == 1 and h.op_A.x() != last_char_added.x():
-            # An early validation, where the comparison goes back to
-            # one of the early chars. Imagine when we use regex /[.0-9+-]/
-            # for int, and finally validate it with int(mystr)
-            return (1, EState.Trim, h)
-
-        else:
-            return (-1, EState.Unknown, (h, last_char_added))
+        if h.op_A.x() == len(arg_prefix): return EState.EOF
+        elif len(h.op_A) == 1: return EState.Trim
+        else: return EState.Unknown
 
     def comparisons_on_given_char(self, h, cmp_traces):
-        """
-        The question we are answering is simple. What caused the last
-        error, and how one may fix the error and continue.
-        Fixing the char that caused the error is the absolute simplest one can
-        go. However, that may not be the best especially if one wants to generate
-        multiple strings. For that, we need get all the comparisons made on the
-        last character -- let us call it cmp_stack. The correct way to
-        generate test cases is to ensure that everything until the point
-        we want to diverge is satisfied, but ignore the remaining. That is,
-        choose a point i arbitrarily from cmp_stack, and get
-        lst = cmp_stack[i:] (remember cmp_stack is reversed)
-        and satisfy all in lst.
-        """
         return [(i,t) for i,t in enumerate(cmp_traces) if h.op_A.x() == t.op_A.x()]
 
     def extract_solutions(self, elt, lst_solutions, flip=False):
@@ -190,11 +119,9 @@ class DFPrefix(Prefix):
             diverge, *satisfy = cmp_stack[v:]
             lst_solutions = All_Characters
             for i,elt in reversed(satisfy):
-                # assert elt.op_A == self.last_char_added()
                 lst_solutions = self.extract_solutions(elt, lst_solutions, False)
             # now we need to diverge here
             i, elt = diverge
-            # assert elt.op_A == self.last_char_added()
             lst_solutions = self.extract_solutions(elt, lst_solutions, True)
             if lst_solutions:
                 return lst_solutions
@@ -231,12 +158,9 @@ class DFPrefix(Prefix):
         # so get the comparison with the last element.
         while traces:
             h, *ltrace = traces
-            o = h.op
-
-            idx, k, info = self.parsing_state(h, arg_prefix)
-            log((RandomSeed, i, idx, k, info, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
+            k = self.parsing_state(h, arg_prefix)
+            log((RandomSeed, i, k, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
             sprefix = str(arg_prefix)
-            new_prefix = sprefix[:-1]
 
             if k == EState.Trim:
                 end =  h.op_A.x()
@@ -254,29 +178,25 @@ class DFPrefix(Prefix):
                 corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
                 if not corr: raise Exception('Exhausted attempts: %s' % fixes)
                 # check for line cov here.
-                sols = []
                 chars = [new_char for v in corr for new_char in v]
-                chars = chars if WeightedGeneration else sorted(set(chars))
-                for new_char in chars:
-                    arg = "%s%s" % (new_prefix, new_char)
-                    sols.append(self.create_prefix(arg))
+                chars = chars if config.WeightedGeneration else sorted(set(chars))
+                new_prefix = sprefix[:-1]
+                sols = [self.create_prefix("%s%s" % (new_prefix, new_char))
+                        for new_char in chars]
                 return sols
 
             elif k == EState.EOF:
                 # An empty comparison at the EOF
-                sols = []
-                for new_char in All_Characters:
-                    arg = "%s%s" % (sprefix, new_char)
-                    sols.append(self.create_prefix(arg))
+                sols = [self.create_prefix("%s%s" % (sprefix, new_char))
+                        for new_char in All_Characters]
 
                 return sols
-            elif k == EState.Unknown:
+            else:
+                assert k == EState.Unknown
                 # Unknown what exactly happened. Strip the last and try again
                 # try again.
                 traces = ltrace
                 continue
-            else:
-                assert False
 
         return []
 
@@ -377,7 +297,7 @@ class BFSPrefix(Prefix):
         all_traces = [t for t in traces if type(t.opA) is tstr if t.op in CmpSet]
         initial_trace = [t for t in all_traces if t.opA.is_tpos_contained(self.obs_pos)]
 
-        for i in range(1, Comparison_Equality_Chain):
+        for i in range(1, config.Comparison_Equality_Chain):
             i_comparisons = [t for t in all_traces if t.opA.is_tpos_contained(self.obs_pos-i)]
             if not self._check_trace_eq(i_comparisons, initial_trace): return False
         return True
@@ -452,13 +372,13 @@ class Chain:
     # Used to start execution at arbitrary iterations.
     # requires prior dump
     def load(self, i):
-        with open(Pickled % i, 'rb') as f:
+        with open(config.Pickled % i, 'rb') as f:
             self.__dict__ = pickle.load(f)
             random.setstate(self.rstate)
 
     # Save the execution states at each iteration.
     def dump(self):
-        with open(Pickled % self.start_i, 'wb') as f:
+        with open(config.Pickled % self.start_i, 'wb') as f:
             self.rstate = random.getstate()
             pickle.dump(self.__dict__, f, pickle.HIGHEST_PROTOCOL)
 
@@ -471,7 +391,7 @@ class Chain:
         self.add_sys_args(prefix.my_arg)
 
     def log_comparisons(self):
-        if Log_Comparisons:
+        if config.Log_Comparisons:
             for c in tainted.Comparisons: print("%d,%s" % (c.op_A.x(), repr(c)))
 
     def prune(self, solutions):
@@ -484,19 +404,19 @@ class Chain:
 
     def exec_argument(self, fn):
         self.start_i = 0
-        if Load: self.load(Load)
+        if config.Load: self.load(config.Load)
 
         # replace interesting things
-        if MyPrefix:
-            solution_stack = [DFPrefix(MyPrefix)]
+        if config.MyPrefix:
+            solution_stack = [DFPrefix(config.MyPrefix)]
         else:
             solution_stack = [DFPrefix(random.choice(All_Characters))]
 
-        for i in range(self.start_i, MaxIter):
+        for i in range(self.start_i, config.MaxIter):
             my_prefix, *solution_stack = solution_stack
             self.apply_prefix(my_prefix)
             self.start_i = i
-            if Dump: self.dump()
+            if config.Dump: self.dump()
             tainted.Comparisons = []
             try:
                 log(">> %s" % self.sys_args(), 1)
@@ -509,10 +429,10 @@ class Chain:
             except Exception as e:
                 self.seen.add(repr(self.current_prefix.my_arg))
                 log('Exception %s' % e)
-                if i == MaxIter//100 and InitiateBFS:
+                if i == MaxIter//100 and config.InitiateBFS:
                     print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True)
                     self.arg_at_bfs = self.current_prefix.my_arg
-                    if Aggressive:
+                    if config.Aggressive:
                         self.current_prefix = BFSPrefix(self.current_prefix)
                     else:
                         self.current_prefix.bfs = True
@@ -532,11 +452,3 @@ class Chain:
                         solution_stack = [self.current_prefix.create_prefix(new_arg)]
                     else:
                         raise Exception('BFS: No suitable continuation found')
-
-
-if __name__ == '__main__':
-    import imp
-    arg = sys.argv[1]
-    _mod = imp.load_source('mymod', arg)
-    e = Chain()
-    e.exec_argument(_mod.main)

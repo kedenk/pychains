@@ -37,7 +37,7 @@ class EState(enum.Enum):
     Trim = enum.auto()
     # End of string as found using tainting or a comparison with the
     # empty string
-    EOF = enum.auto()
+    Append = enum.auto()
     # -
     Unknown = enum.auto()
 
@@ -87,7 +87,7 @@ class DFPrefix(Prefix):
         return largest, lelt
 
     def parsing_state(self, h, arg_prefix):
-        if h.op_A.x() == len(arg_prefix): return EState.EOF
+        if h.op_A.x() == len(arg_prefix): return EState.Append
         elif len(h.op_A) == 1: return EState.Trim
         else: return EState.Unknown
 
@@ -185,7 +185,7 @@ class DFPrefix(Prefix):
                         for new_char in chars]
                 return sols
 
-            elif k == EState.EOF:
+            elif k == EState.Append:
                 # An empty comparison at the EOF
                 sols = [self.create_prefix("%s%s" % (sprefix, new_char))
                         for new_char in All_Characters]

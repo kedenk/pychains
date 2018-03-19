@@ -19,7 +19,7 @@ MaxIter = 100000
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
-Return_Probability = 1.0
+Return_Probability =  float(os.getenv('MY_RP') or '1.0')
 
 # The sampling distribution from which the characters are chosen.
 Distribution='U'

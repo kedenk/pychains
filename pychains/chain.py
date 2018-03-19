@@ -151,7 +151,6 @@ class DFPrefix(Prefix):
     def solve(self, my_traces, i):
         traces = list(reversed(my_traces))
         arg_prefix = self.my_arg
-        last_char_added = arg_prefix[-1]
         # add the prefix to seen.
         Seen_Prefixes.add(str(arg_prefix))
         # we are assuming a character by character comparison.
@@ -178,7 +177,7 @@ class DFPrefix(Prefix):
                 corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
                 if not corr: raise Exception('Exhausted attempts: %s' % fixes)
                 # check for line cov here.
-                chars = [new_char for v in corr for new_char in v]
+                chars = sum(corr, [])
                 chars = chars if config.WeightedGeneration else sorted(set(chars))
                 new_prefix = sprefix[:-1]
                 sols = [self.create_prefix("%s%s" % (new_prefix, new_char))
@@ -200,91 +199,56 @@ class DFPrefix(Prefix):
 
         return []
 
-class Change:
-    # the class looks like
-    #   change_position,
-    #   position for new observation,
-    #   string used for replacement,
-    #   list of comparisons made on the char under observation,
-    #   string that was used as input for the parent which lead to the
-    #       production of this Node)
-    def __init__(self, change_pos, obs_pos, rep_str, input_str):
-        self.__dict__.update(locals())
-        self.change_pos,self.obs_pos,self.rep_str = change_pos,obs_pos,rep_str
-        self._str = (self.input_str[0:self.change_pos] + self.rep_str +
-            self.input_str[self.change_pos + 1:])
-        self._nxt = self._str[:self.obs_pos] + "A" + self._str[self.obs_pos:]
-        self._repr = repr((self.change_pos, self.obs_pos, self.rep_str,
-            self._str, self._nxt))
+class BFPrefix(DFPrefix):
 
-    # returns a new input by substituting the change position and adding a new
-    # char at the next position that should be observed
-    def get_next_input(self): return self._nxt
-    def __str__(self): return self._str
-    def __repr__(self): return self._repr
+    def create_prefix(self, myarg):
+        return BFPrefix(myarg, self.bfs)
 
-class BFSPrefix(Prefix):
-    # parent is an object of class BFSPrefix
-    # change is is used to determine a substitution
-    #  node
-    def __init__(self, prefix, fixes=[]):
-        c = self.create_change_from_prefix(prefix)
-        self.add_change(c)
-
-    def add_change(self, c):
-        self.change = c
-        self.my_arg = c.input_str
-        self.obs_pos = c.obs_pos # defines the observation position for this prefix
-
-    def apply_change(self, c):
-        self.add_change(c)
-        self.my_arg = c.get_next_input()
-        # defines the observation position for this prefix
-        return self
-
-    def create_change_from_prefix(self, prefix):
-        last_idx = len(prefix.my_arg) - 1
-        input_str = prefix.my_arg
-        rep_str = prefix.my_arg[-1]
-        return Change(last_idx, last_idx, rep_str, input_str)
-
-    def create_prefix(self, my_arg, fixes=[]):
-        b = BFSPrefix(self)
-        b.my_arg = my_arg
-        return b
-
-    # Comparison filtering and new BFS_Prefix generation
-    # lets first use a simple approach where strong equality is used for
-    # replacement in the first input also we use parts of the rhs of the
-    # in statement as substitution
     def solve(self, my_traces, i):
-        # for now
-        next_inputs = []
-        only_tainted = [t for t in my_traces
-              if t.opA.is_tpos_contained(self.obs_pos)]
-        comparisons = [t for t in only_tainted if t.op in CmpSet]
-        for t in comparisons:
-            opB = [t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
-            next_inputs.extend(self._next_inputs(t.opA, opB))
+        traces = list(reversed(my_traces))
+        arg_prefix = self.my_arg
+        # add the prefix to seen.
+        Seen_Prefixes.add(str(arg_prefix))
+        # we are assuming a character by character comparison.
+        # so get the comparison with the last element.
+        sols = []
+        while traces:
+            h, *ltrace = traces
+            k = self.parsing_state(h, arg_prefix)
+            log((config.RandomSeed, i, k, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
+            sprefix = str(arg_prefix)
 
-        # add some letter as substitution as well
-        # if nothing else was added, this means, that the character at the
-        # position under observation did not have a comparison, so we do also
-        # not add a "B", because the prefix is likely already completely wrong
-        if not next_inputs: return []
+            end =  h.op_A.x()
+            similar = [i for i in Seen_Prefixes if str(arg_prefix[:end]) in i
+                       and len(i) > len(arg_prefix[:end])]
+            fixes = [i[end] for i in similar]
 
-        # now make the list of tuples a list of prefixes
-        return [BFSPrefix(self).apply_change(c) for c in next_inputs]
+            cmp_stack = self.comparisons_on_given_char(h, traces)
 
-    # appends a new input based on the current checking position, the subst. and
-    # the value which was used for the run the next position to observe will lie
-    # directly behind the substituted position
-    def _new_inputs(self, pos, subst):
-        return [Change(pos, pos + len(subst), subst, self.my_arg)]
+            corr = []
+            for i, t in cmp_stack:
+                opB = [t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
+                for o in opB:
+                    if o in fixes: continue
+                    if not o: continue
+                    corr.append(o)
 
-    def _next_inputs(self, opA, opB):
-        new_vals = [self._new_inputs(self.obs_pos, c) for c in opB]
-        return sum(new_vals, []) # flatten one level
+            if k == EState.Trim:
+                if not corr:
+                    return sols
+            elif k == EState.Append:
+                if not corr:
+                    sols.append(self.create_prefix("%s%s" % (sprefix,random.choice(All_Characters))))
+                    traces = [i for i in traces if len(i.opA) == 1]
+                    continue
+
+            chars = corr if config.WeightedGeneration else sorted(set(corr))
+            new_prefix = sprefix[:end]
+            for new_char in chars:
+                sols.append(self.create_prefix("%s%s" % (new_prefix, new_char)))
+            return sols
+
+        return []
 
 class Chain:
 
@@ -368,7 +332,7 @@ class Chain:
                     print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True)
                     self.arg_at_bfs = self.current_prefix.my_arg
                     if config.Aggressive:
-                        self.current_prefix = BFSPrefix(self.current_prefix)
+                        self.current_prefix = BFPrefix(str(self.current_prefix.my_arg))
                     else:
                         self.current_prefix.bfs = True
                     self.initiate_bfs = True

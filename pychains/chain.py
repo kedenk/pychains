@@ -72,14 +72,9 @@ def create_arg(s):
         return s
 
 class EState(enum.Enum):
-    # A character comparison using the last character
-    Char = enum.auto()
 
     # A char comparison made using a previous character
     Trim = enum.auto()
-
-    # A string token comparison
-    String = enum.auto()
 
     # End of string as found using tainting or a comparison with the
     # empty string
@@ -137,23 +132,13 @@ class DFPrefix(Prefix):
         last_char_added = arg_prefix[-1]
         o = h.op
 
-        if o in [Op.EQ, Op.NE] and isinstance(h.op_B, str) and len(h.op_B) > 1 and h.op_A.x() == last_char_added.x():
-            # Dont add IN and NOT_IN -- '0' in '0123456789' is a common
-            # technique in char comparision to check for digits
-            # A string comparison rather than a character comparison.
-            return (1, EState.String, h)
-
-        elif o in CmpSet and isinstance(h.op_B, list) and max([len(b) for b in h.op_B]) > 1 and h.op_A.x() == last_char_added.x():
-            # A string comparison rather than a character comparison.
-            return (1, EState.String, h)
+        if h.op_A.x() == len(arg_prefix):
+            # An empty comparison at the EOF
+            return (1, EState.EOF, h)
 
         elif h.op_A.x() == last_char_added.x():
             # A character comparison of the *last* char.
-            return (1, EState.Char, h)
-
-        elif h.op_A.x() == len(arg_prefix):
-            # An empty comparison at the EOF
-            return (1, EState.EOF, h)
+            return (1, EState.Trim, h)
 
         elif len(h.op_A) == 1 and h.op_A.x() != last_char_added.x():
             # An early validation, where the comparison goes back to
@@ -164,27 +149,21 @@ class DFPrefix(Prefix):
         else:
             return (-1, EState.Unknown, (h, last_char_added))
 
-    def comparisons_on_last_char(self, h, cmp_traces):
+    def comparisons_on_given_char(self, h, cmp_traces):
         """
         The question we are answering is simple. What caused the last
         error, and how one may fix the error and continue.
-        Fixing the last error is the absolute simplest one can go. However,
-        that may not be the best especially if one wants to generate multiple
-        strings. For that, we need get all the comparisons made on the last
-        character -- let us call it cmp_stack. The correct way to
+        Fixing the char that caused the error is the absolute simplest one can
+        go. However, that may not be the best especially if one wants to generate
+        multiple strings. For that, we need get all the comparisons made on the
+        last character -- let us call it cmp_stack. The correct way to
         generate test cases is to ensure that everything until the point
         we want to diverge is satisfied, but ignore the remaining. That is,
         choose a point i arbitrarily from cmp_stack, and get
         lst = cmp_stack[i:] (remember cmp_stack is reversed)
         and satisfy all in lst.
         """
-        cmp_stack = []
-        check = False
-        for i, t in enumerate(cmp_traces):
-            if not len(t.op_A) == 1: continue
-            if h.op_A.x() != t.op_A.x(): break
-            cmp_stack.append((i, t))
-        return cmp_stack
+        return [(i,t) for i,t in enumerate(cmp_traces) if h.op_A.x() == t.op_A.x()]
 
     def extract_solutions(self, elt, lst_solutions, flip=False):
         fn = tainted.COMPARE_OPERATORS[elt.op]
@@ -228,9 +207,12 @@ class DFPrefix(Prefix):
         at the top of the stack, and first at the bottom. Choose a point
         somewhere and generate a character that conforms to everything until then.
         """
+        if not cmp_stack: return [l for l in All_Characters if constraints(l)]
+
         stack_size = len(cmp_stack)
         lst_positions = list(range(stack_size-1,-1,-1))
         solutions = []
+
 
         for point_of_divergence in lst_positions:
             lst_solutions = self.get_lst_solutions_at_divergence(cmp_stack, point_of_divergence)
@@ -254,10 +236,12 @@ class DFPrefix(Prefix):
             idx, k, info = self.parsing_state(h, arg_prefix)
             log((RandomSeed, i, idx, k, info, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
             sprefix = str(arg_prefix)
+            new_prefix = sprefix[:-1]
 
-            if k == EState.Char:
+            if k == EState.Trim:
                 end =  h.op_A.x()
-                similar = [i for i in Seen_Prefixes if str(arg_prefix[:-1]) in i and len(i) >= len(arg_prefix)]
+                similar = [i for i in Seen_Prefixes if str(arg_prefix[:end]) in i
+                           and len(i) > len(arg_prefix[:end])]
                 fixes = [i[end] for i in similar]
 
                 # A character comparison of the *last* char.
@@ -265,62 +249,19 @@ class DFPrefix(Prefix):
                 # comparisons made using this character. until the
                 # first comparison that was made otherwise.
                 # Now, try to fix the last failure
-                cmp_stack = self.comparisons_on_last_char(h, traces)
-                if str(h.op_A) == str(last_char_added) and o in CmpSet:
-                    # Now, try to fix the last failure
-                    corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
-                    if not corr: raise Exception('Exhausted attempts: %s' % fixes)
-                else:
-                    if cmp_stack:
-                        corr = self.get_corrections(cmp_stack, lambda i: True)
-                    else:
-                        # possibly a space added, and stripped. We act as a trim.
-                        end =  h.op_A.x()
-                        fixes = [i[end] for i in similar]
-                        args = sprefix[:end] + random.choice([i for i in All_Characters if i not in fixes])
-
-                        # we already know the result for next character
-                        sols = [self.create_prefix(args)]
-                        return sols
-
+                cmp_stack = self.comparisons_on_given_char(h, traces)
+                # Now, try to fix the last failure
+                corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
+                if not corr: raise Exception('Exhausted attempts: %s' % fixes)
                 # check for line cov here.
-                prefix = sprefix[:-1]
                 sols = []
                 chars = [new_char for v in corr for new_char in v]
                 chars = chars if WeightedGeneration else sorted(set(chars))
                 for new_char in chars:
-                    arg = "%s%s" % (prefix, new_char)
+                    arg = "%s%s" % (new_prefix, new_char)
                     sols.append(self.create_prefix(arg))
-
                 return sols
-            elif k == EState.Trim:
-                # we need to (1) find where h.op_A._idx is within
-                # sys_args, and trim sys_args to that location, and
-                # add a new character.
-                end =  h.op_A.x()
 
-                similar = [i for i in Seen_Prefixes if str(arg_prefix[:end]) in i]
-                fixes = [i[end] for i in similar]
-                args = sprefix[:h.op_A.x()] + random.choice([i for i in All_Characters if i not in fixes])
-                # we already know the result for next character
-                sols = [self.create_prefix(args)]
-                return sols # VERIFY - TODO
-
-            elif k == EState.String:
-                if o in [Op.IN, Op.NOT_IN]:
-                    opB = self.best_matching_str(str(h.op_A), [str(i) for i in h.op_B])
-                elif o in [Op.EQ, Op.NE]:
-                    opB = str(h.op_B)
-                else:
-                    assert False
-                common = os.path.commonprefix([str(h.op_A), opB])
-                # assert str(opB)[len(common)-1] == last_char_added
-                if not common:
-                    arg = "%s%s" % ('', str(opB)[len(common):])
-                else:
-                    arg = "%s%s" % (sprefix, str(opB)[len(common):])
-                sols = [self.create_prefix(arg)]
-                return sols
             elif k == EState.EOF:
                 # An empty comparison at the EOF
                 sols = []

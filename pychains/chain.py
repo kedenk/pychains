@@ -16,6 +16,7 @@ random.seed(RandomSeed)
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
 MaxIter = 10000000
+# MaxIter = 10000
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
@@ -395,15 +396,14 @@ class BFSPrefix(Prefix):
         # likely end in an infinite string, so we prune branches starting here
         if len(s) <= 3:
             return False
-        for banned in string_literals:
-            if banned in s:
-                return True
         if "BBBA" in str(node.get_next_input()):
             return True
         # print(repr(s), repr(s[0:len(s) // 2]), repr(s[len(s) // 2:]))
         if s[len(s) // 2:].endswith(s[0:len(s) // 2]):
             return True
         if self._comparison_chain_equal(node):
+            return True
+        if re.search(string_literals, s):
             return True
         return False
 
@@ -759,7 +759,7 @@ class Chain:
         solution_stack = [DFPrefix(random.choice(All_Characters))]
         # solution_stack = [DFPrefix("(-12 + ( pi * ")]
         # solution_stack = [DFPrefix("{\"asd\":[ ")]
-        solution_stack = [DFPrefix("A")]
+        # solution_stack = [DFPrefix("A")]
 
         for i in range(self.start_i, MaxIter):
             my_prefix, *solution_stack = solution_stack
@@ -781,7 +781,8 @@ class Chain:
                     return v
             except Exception as e:
                 # sys.settrace(None)
-                if i == 0: #i == MaxIter//100 and InitiateBFS:
+                if i == 0:
+                # if i == MaxIter//100 and InitiateBFS:
                     print('with BFS', flush=True)
                     self.current_prefix = BFSPrefix(self.current_prefix)
                 traces = tainted.Comparisons
@@ -861,11 +862,15 @@ def add_string_literal(string_literal:str):
 
 def make_string_literal_superset():
     global string_literals
-    new_literals = set()
+    regex = "("
     for s1 in string_literals:
-        for s2 in string_literals:
-            new_literals.add(s1+s2)
-    string_literals = new_literals
+        regex += s1 + "|"
+    regex = regex[:-1]
+    regex += ")[a-zA-Z]*("
+    for s1 in string_literals:
+        regex += s1 + "|"
+    regex = regex[:-1] + ")"
+    string_literals = re.compile(regex)
 
 
 if __name__ == '__main__':

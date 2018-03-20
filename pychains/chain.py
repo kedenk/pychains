@@ -76,58 +76,6 @@ class DFPrefix(Prefix):
         return [(i,t) for i,t in enumerate(cmp_traces)
                 if h.op_A.x() == t.op_A.x()]
 
-    def extract_solutions(self, elt, lst_solutions, flip=False):
-        fn = tainted.COMPARE_OPERATORS[elt.op]
-        result = fn(str(elt.op_A), str(elt.op_B))
-        if isinstance(elt.op_B, str) and len(elt.op_B) == 0:
-            assert Op(elt.op) in [Op.EQ, Op.NE]
-            return lst_solutions
-        else:
-            myfn = fn if not flip else lambda a, b: not fn(a, b)
-            fres = lambda x: x if result else not x
-            return [c for c in lst_solutions
-                    if fres(myfn(str(c), str(elt.op_B)))]
-
-    def get_lst_solutions_at_divergence(self, cmp_stack, v):
-        # if we dont get a solution by inverting the last comparison, go one
-        # step back and try inverting it again.
-        stack_size = len(cmp_stack)
-        while v < stack_size:
-            # now, we need to skip everything till v
-            diverge, *satisfy = cmp_stack[v:]
-            lst_solutions = All_Characters
-            for i,elt in reversed(satisfy):
-                lst_solutions = self.extract_solutions(elt, lst_solutions, False)
-            # now we need to diverge here
-            i, elt = diverge
-            lst_solutions = self.extract_solutions(elt, lst_solutions, True)
-            if lst_solutions:
-                return lst_solutions
-            v += 1
-        return []
-
-    def get_corrections(self, cmp_stack, constraints):
-        """
-        cmp_stack contains a set of comparions, with the last comparison made
-        at the top of the stack, and first at the bottom. Choose a point
-        somewhere and generate a character that conforms to everything until
-        then.
-        """
-        if not cmp_stack or config.Dumb_Search:
-            return [[l] for l in All_Characters if constraints(l)]
-
-        stack_size = len(cmp_stack)
-        lst_positions = list(range(stack_size-1,-1,-1))
-        solutions = []
-
-        for point_of_divergence in lst_positions:
-            lst_solutions = self.get_lst_solutions_at_divergence(cmp_stack,
-                    point_of_divergence)
-            lst = [l for l in lst_solutions if constraints(l)]
-            if lst:
-                solutions.append(lst)
-        return solutions
-
     def solve(self, my_traces, i):
         traces = list(reversed(my_traces))
         arg_prefix = self.my_arg
@@ -141,6 +89,10 @@ class DFPrefix(Prefix):
             log((config.RandomSeed, i, k, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
             sprefix = str(arg_prefix)
 
+            # There are just two fundamental operations: If we made a mistake, and
+            # we know where we made it, trim the input at that location. The second
+            # is when we know we haven't made any mistakes, and just want to append
+            # more data.
             if k == EState.Trim:
                 end =  h.op_A.x()
                 similar = [i for i in Seen_Prefixes
@@ -148,21 +100,12 @@ class DFPrefix(Prefix):
                            len(i) > len(arg_prefix[:end])]
                 fixes = [i[end] for i in similar]
 
-                # A character comparison of the *last* char.
-                # This was a character comparison. So collect all
-                # comparisons made using this character. until the
-                # first comparison that was made otherwise.
-                # Now, try to fix the last failure
-                cmp_stack = self.comparisons_on_given_char(h, traces)
-                # Now, try to fix the last failure
-                corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
+                corr = [l for l in All_Characters if l not in fixes]
                 if not corr: raise Exception('Exhausted attempts: %s' % fixes)
                 # check for line cov here.
-                chars = sum(corr, [])
-                chars = chars if config.WeightedGeneration else sorted(set(chars))
                 new_prefix = sprefix[:-1]
                 sols = [self.create_prefix("%s%s" % (new_prefix, new_char))
-                        for new_char in chars]
+                        for new_char in corr]
                 return sols
 
             elif k == EState.Append:

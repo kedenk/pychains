@@ -18,7 +18,8 @@ def log(var, i=1):
     if config.Debug >= i: print(repr(var), file=sys.stderr, flush=True)
 
 def o(d='', var=None, i=1):
-    if config.Debug >= i: print(d, repr(var) if var else '', file=sys.stdout, flush=True)
+    if config.Debug >= i:
+        print(d, repr(var) if var else '', file=sys.stdout, flush=True)
 
 import pudb
 brk = pudb.set_trace
@@ -26,10 +27,7 @@ brk = pudb.set_trace
 # TODO: Any kind of preprocessing -- space strip etc. distorts the processing.
 
 def create_arg(s):
-    if config.Track:
-        return tainted.tstr(s)
-    else:
-        return s
+    return tainted.tstr(s)
 
 class EState(enum.Enum):
     # A char comparison made using a previous character
@@ -43,12 +41,8 @@ class EState(enum.Enum):
 Seen_Prefixes = set()
 
 class Prefix:
-    def __init__(self, myarg, bfs=False):
-        if type(myarg) is not tainted.tstr:
-            self.my_arg = create_arg(myarg)
-        else:
-            self.my_arg = myarg
-        self.bfs = bfs
+    def __init__(self, myarg):
+        self.my_arg = tainted.tstr(str(myarg))
 
     def __repr__(self):
         return repr(self.my_arg)
@@ -67,10 +61,11 @@ class DFPrefix(Prefix):
 
     def continue_valid(self):
         if  random.uniform(0,1) > config.Return_Probability:
-            return [self.create_prefix(str(self.my_arg) + random.choice(All_Characters))]
+            return [self.create_prefix(str(self.my_arg) +
+                random.choice(All_Characters))]
 
     def create_prefix(self, myarg):
-        return DFPrefix(myarg, self.bfs)
+        return DFPrefix(myarg)
 
     def parsing_state(self, h, arg_prefix):
         if h.op_A.x() == len(arg_prefix): return EState.Append
@@ -78,23 +73,20 @@ class DFPrefix(Prefix):
         else: return EState.Unknown
 
     def comparisons_on_given_char(self, h, cmp_traces):
-        return [(i,t) for i,t in enumerate(cmp_traces) if h.op_A.x() == t.op_A.x()]
+        return [(i,t) for i,t in enumerate(cmp_traces)
+                if h.op_A.x() == t.op_A.x()]
 
     def extract_solutions(self, elt, lst_solutions, flip=False):
         fn = tainted.COMPARE_OPERATORS[elt.op]
         result = fn(str(elt.op_A), str(elt.op_B))
         if isinstance(elt.op_B, str) and len(elt.op_B) == 0:
-            if Op(elt.op) in [Op.EQ, Op.NE]:
-                return lst_solutions
-            else:
-                assert False
+            assert Op(elt.op) in [Op.EQ, Op.NE]
+            return lst_solutions
         else:
             myfn = fn if not flip else lambda a, b: not fn(a, b)
-            if result:
-                lst = [c for c in lst_solutions if myfn(str(c), str(elt.op_B))]
-            else:
-                lst = [c for c in lst_solutions if not myfn(str(c), str(elt.op_B))]
-            return lst
+            fres = lambda x: x if result else not x
+            return [c for c in lst_solutions
+                    if fres(myfn(str(c), str(elt.op_B)))]
 
     def get_lst_solutions_at_divergence(self, cmp_stack, v):
         # if we dont get a solution by inverting the last comparison, go one
@@ -118,7 +110,8 @@ class DFPrefix(Prefix):
         """
         cmp_stack contains a set of comparions, with the last comparison made
         at the top of the stack, and first at the bottom. Choose a point
-        somewhere and generate a character that conforms to everything until then.
+        somewhere and generate a character that conforms to everything until
+        then.
         """
         if not cmp_stack: return [l for l in All_Characters if constraints(l)]
 
@@ -126,9 +119,9 @@ class DFPrefix(Prefix):
         lst_positions = list(range(stack_size-1,-1,-1))
         solutions = []
 
-
         for point_of_divergence in lst_positions:
-            lst_solutions = self.get_lst_solutions_at_divergence(cmp_stack, point_of_divergence)
+            lst_solutions = self.get_lst_solutions_at_divergence(cmp_stack,
+                    point_of_divergence)
             lst = [l for l in lst_solutions if constraints(l)]
             if lst:
                 solutions.append(lst)
@@ -149,8 +142,9 @@ class DFPrefix(Prefix):
 
             if k == EState.Trim:
                 end =  h.op_A.x()
-                similar = [i for i in Seen_Prefixes if str(arg_prefix[:end]) in i
-                           and len(i) > len(arg_prefix[:end])]
+                similar = [i for i in Seen_Prefixes
+                        if str(arg_prefix[:end]) in i and
+                           len(i) > len(arg_prefix[:end])]
                 fixes = [i[end] for i in similar]
 
                 # A character comparison of the *last* char.
@@ -188,7 +182,7 @@ class DFPrefix(Prefix):
 class BFPrefix(DFPrefix):
 
     def create_prefix(self, myarg):
-        return BFPrefix(myarg, self.bfs)
+        return BFPrefix(myarg)
 
     def solve(self, my_traces, i):
         # Fast predictive solutions. Use only known characters to fill in when
@@ -200,17 +194,17 @@ class BFPrefix(DFPrefix):
         while traces:
             h, *ltrace = traces
             k = self.parsing_state(h, arg_prefix)
-            log((config.RandomSeed, i, k, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
+            log((config.RandomSeed, i, k, "is tainted",
+                isinstance(h.op_A, tainted.tstr)), 1)
             sprefix = str(arg_prefix)
-
             end =  h.op_A.x()
             similar = [i for i in Seen_Prefixes if str(arg_prefix[:end]) in i
                        and len(i) > len(arg_prefix[:end])]
             fixes = [i[end] for i in similar]
 
             cmp_stack = self.comparisons_on_given_char(h, traces)
-
-            opBs = [[t.opB] if t.op in [Op.EQ, Op.NE] else t.opB for i, t in cmp_stack]
+            opBs = [[t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
+                    for i, t in cmp_stack]
             corr = [i for i in sum(opBs, []) if i and i not in fixes]
 
             if k == EState.Trim:
@@ -219,7 +213,8 @@ class BFPrefix(DFPrefix):
             elif k == EState.Append:
                 if not corr:
                     # last resort. Use random fill in
-                    sols.append(self.create_prefix("%s%s" % (sprefix,random.choice(All_Characters))))
+                    sols.append(self.create_prefix("%s%s" %
+                        (sprefix,random.choice(All_Characters))))
                     traces = [i for i in traces if len(i.opA) == 1]
                     continue
 
@@ -259,26 +254,18 @@ class Chain:
     def prune(self, solutions):
         # never retry an argument.
         solutions = [s for s in solutions if repr(s.my_arg) not in self.seen]
-        if self.initiate_bfs:
-            return solutions
-        else:
-            return [random.choice(solutions)]
+        return solutions if self.initiate_bfs else [random.choice(solutions)]
 
     def exec_argument(self, fn):
         self.start_i = 0
-        if config.Load: self.load(config.Load)
-
         # replace interesting things
-        if config.MyPrefix:
-            solution_stack = [DFPrefix(config.MyPrefix)]
-        else:
-            solution_stack = [DFPrefix(random.choice(All_Characters))]
+        solution_stack = [DFPrefix(config.MyPrefix if config.MyPrefix
+            else random.choice(All_Characters))]
 
         for i in range(self.start_i, config.MaxIter):
             my_prefix, *solution_stack = solution_stack
             self.apply_prefix(my_prefix)
             self.start_i = i
-            if config.Dump: self.dump()
             tainted.Comparisons = []
             try:
                 log(">> %s" % self.sys_args(), 1)
@@ -294,10 +281,7 @@ class Chain:
                 if i == config.MaxIter//100 and config.InitiateBFS:
                     print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True)
                     self.arg_at_bfs = self.current_prefix.my_arg
-                    if config.Aggressive:
-                        self.current_prefix = BFPrefix(str(self.current_prefix.my_arg))
-                    else:
-                        self.current_prefix.bfs = True
+                    self.current_prefix = BFPrefix(str(self.current_prefix.my_arg))
                     self.initiate_bfs = True
                 self.traces = tainted.Comparisons
                 solution_stack.extend(self.current_prefix.solve(self.traces, i))

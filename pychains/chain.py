@@ -57,7 +57,7 @@ class Prefix:
     def continue_valid(self):
         return []
 
-class DFPrefix(Prefix):
+class DeepSearch(Prefix):
 
     def continue_valid(self):
         if  random.uniform(0,1) > config.Return_Probability:
@@ -65,7 +65,7 @@ class DFPrefix(Prefix):
                 random.choice(All_Characters))]
 
     def create_prefix(self, myarg):
-        return DFPrefix(myarg)
+        return DeepSearch(myarg)
 
     def parsing_state(self, h, arg_prefix):
         if h.op_A.x() == len(arg_prefix): return EState.Append
@@ -123,10 +123,10 @@ class DFPrefix(Prefix):
 
         return []
 
-class BFPrefix(DFPrefix):
+class WideSearch(DeepSearch):
 
     def create_prefix(self, myarg):
-        return BFPrefix(myarg)
+        return WideSearch(myarg)
 
     def solve(self, my_traces, i):
         # Fast predictive solutions. Use only known characters to fill in when
@@ -203,7 +203,7 @@ class Chain:
     def exec_argument(self, fn):
         self.start_i = 0
         # replace interesting things
-        solution_stack = [DFPrefix(config.MyPrefix if config.MyPrefix
+        solution_stack = [DeepSearch(config.MyPrefix if config.MyPrefix
             else random.choice(All_Characters))]
 
         for i in range(self.start_i, config.MaxIter):
@@ -225,7 +225,7 @@ class Chain:
                 if i == config.MaxIter//100 and config.InitiateBFS:
                     print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True)
                     self.arg_at_bfs = self.current_prefix.my_arg
-                    self.current_prefix = BFPrefix(str(self.current_prefix.my_arg))
+                    self.current_prefix = WideSearch(str(self.current_prefix.my_arg))
                     self.initiate_bfs = True
                 self.traces = tainted.Comparisons
                 solution_stack.extend(self.current_prefix.solve(self.traces, i))

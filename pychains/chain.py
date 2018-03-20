@@ -391,12 +391,12 @@ class BFSPrefix(Prefix):
     # it ends with a value which was not successful for a small input
     def _prune_input(self, node):
         global string_literals
-        s = node.get_substituted_string()
+        s = node.my_arg
         # we do not need to create arbitrarily long strings, such a thing will
         # likely end in an infinite string, so we prune branches starting here
         if len(s) <= 3:
             return False
-        if "BBBA" in str(node.get_next_input()):
+        if "BBBA" in str(node.my_arg):
             return True
         # print(repr(s), repr(s[0:len(s) // 2]), repr(s[len(s) // 2:]))
         if s[len(s) // 2:].endswith(s[0:len(s) // 2]):
@@ -457,10 +457,10 @@ class BFSPrefix(Prefix):
     # check if the input is already in the queue, if yes one can just prune it
     # at this point
     def _check_seen(self, already_seen, node):
-        s = str(node.get_next_input())
+        s = str(node.my_arg)
         if s in already_seen:
             return True
-        already_seen.add(node.get_next_input())
+        already_seen.add(node.my_arg)
 
     # check if an input causes a crash, if not it is likely successful and can
     # be reported
@@ -540,6 +540,13 @@ class BFSPrefix(Prefix):
             inputs.append((pos, len(current) + len(subst) - 1, subst, comparisons, current))
         return inputs
 
+
+    def _reduce_input(self, operand, current):
+        startpos = operand._idx
+        length = len(operand)
+        new_input = current[:startpos] + "A" + current[startpos + length:]
+        return new_input
+
     # Look for an comparisons on a given index (pos).
     # apply the substitution for equality comparisons
     # current is the current argument
@@ -551,9 +558,11 @@ class BFSPrefix(Prefix):
             opA, opB = trace_line.opA, trace_line.opB
             # check if the position that is currently watched is part of the taint
             if type(opA) is tstr and opA.is_tpos_contained(pos):
-                next_inputs.extend(self._new_inputs(pos, opB, current, comparisons))
+                reduced = self._reduce_input(opA, current)
+                next_inputs.extend(self._new_inputs(opA._idx, opB, reduced, comparisons))
             elif type(opB) is tstr and opB.is_tpos_contained(pos):
-                next_inputs.extend(self._new_inputs(pos, opA, current, comparisons))
+                reduced = self._reduce_input(opA, current)
+                next_inputs.extend(self._new_inputs(opB._idx, opA, reduced, comparisons))
             else:
                 return []
             return next_inputs

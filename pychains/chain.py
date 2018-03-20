@@ -679,8 +679,8 @@ class BFSPrefix(Prefix):
         end = len(t.opA)
         next_inputs = []
         try:
-            beg = t[1][3]
-            end = t[1][4]
+            beg = t.args[0]
+            end = t.args[1]
         except:
             pass
         # search in the string for the value the program is looking for, if it

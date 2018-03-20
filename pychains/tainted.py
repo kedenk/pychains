@@ -24,10 +24,11 @@ COMPARE_OPERATORS = {
         }
 
 class Instr:
-    def __init__(self,o, a, b):
+    def __init__(self,o, a, b, args=[]):
         self.opA = a
         self.opB = b
         self.op = o
+        self.args = args
     def o(self):
         if self.op == Op.EQ:
             return 'eq'
@@ -63,7 +64,7 @@ class Instr:
         elif self.op == Op.SPLIT_STR:
             return "%s.split(%s)" % (repr(self.opA), repr(self.opB))
         elif self.op == Op.FIND_STR:
-            return "%s.find(%s)" % (repr(self.opA), repr(self.opB))
+            return "%s.find(%s, %s)" % (repr(self.opA), repr(self.opB), repr(self.args))
         #TODO add split and find here
         else:
             assert False
@@ -117,7 +118,12 @@ class tstr(str):
 
 
     def find(self, sub, start=None, end=None):
-        Comparisons.append(Instr(Op.FIND_STR, self, sub))
+        args = []
+        if start != None:
+            args.append(start)
+        if end != None:
+            args.append(end)
+        Comparisons.append(Instr(Op.FIND_STR, self, sub, args))
         return super().find(sub, start, end)
 
 

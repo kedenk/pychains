@@ -516,6 +516,7 @@ class BFSPrefix(Prefix):
         for input in next_inputs:
             prefix_list.append(BFSPrefix(prefix=None, change=input, parent=self))
 
+        # add nodes with observation pos behind string to the list
         for node in list(prefix_list):
             if node.get_substituted_string() not in self.already_seen:
                 new_node = BFSPrefix(prefix=node)
@@ -756,10 +757,10 @@ class Chain:
         if Load: self.load(Load)
 
         # replace interesting things
-        solution_stack = [DFPrefix(random.choice(All_Characters))]
+        # solution_stack = [DFPrefix(random.choice(All_Characters))]
         # solution_stack = [DFPrefix("(-12 + ( pi * ")]
         # solution_stack = [DFPrefix("{\"asd\":[ ")]
-        # solution_stack = [DFPrefix("A")]
+        solution_stack = [DFPrefix("A")]
 
         for i in range(self.start_i, MaxIter):
             my_prefix, *solution_stack = solution_stack

@@ -126,6 +126,7 @@ class tstr(str):
     def is_tpos_contained(self, tpos):
         # if the tstr is empty, we still need to replace if the position matches, this may be end of string for example
         # and a new char is expected
+        if self._idx == -1: return False # -1 tstr are string literals
         if str(self) == "" and self._idx == tpos:
             return True
         tainted_len = len(self) - self._unmapped_till

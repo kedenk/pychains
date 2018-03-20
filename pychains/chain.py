@@ -57,15 +57,11 @@ class Prefix:
     def continue_valid(self):
         return []
 
-class DeepSearch(Prefix):
-
+class Search(Prefix):
     def continue_valid(self):
         if  random.uniform(0,1) > config.Return_Probability:
             return [self.create_prefix(str(self.my_arg) +
                 random.choice(All_Characters))]
-
-    def create_prefix(self, myarg):
-        return DeepSearch(myarg)
 
     def parsing_state(self, h, arg_prefix):
         if h.op_A.x() == len(arg_prefix): return EState.Append
@@ -76,9 +72,20 @@ class DeepSearch(Prefix):
         return [(i,t) for i,t in enumerate(cmp_traces)
                 if h.op_A.x() == t.op_A.x()]
 
+    def get_previous_fixes(self, h, sprefix):
+        end = h.op_A.x()
+        similar = [i for i in Seen_Prefixes if sprefix[:end] in i and
+                   len(i) > len(sprefix[:end])]
+        return [i[end] for i in similar]
+
+class DeepSearch(Search):
+
+    def create_prefix(self, myarg): return DeepSearch(myarg)
+
     def solve(self, my_traces, i):
         traces = list(reversed(my_traces))
         arg_prefix = self.my_arg
+        sprefix = str(arg_prefix)
         # add the prefix to seen.
         Seen_Prefixes.add(str(arg_prefix))
         # we are assuming a character by character comparison.
@@ -86,33 +93,27 @@ class DeepSearch(Prefix):
         while traces:
             h, *ltrace = traces
             k = self.parsing_state(h, arg_prefix)
-            log((config.RandomSeed, i, k, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
-            sprefix = str(arg_prefix)
-
-            # There are just two fundamental operations: If we made a mistake, and
+            log((config.RandomSeed, i, k, "is tainted",
+                isinstance(h.op_A, tainted.tstr)), 1)
+            end =  h.op_A.x()
+            new_prefix = sprefix[:end]
+            fixes = self.get_previous_fixes(h, sprefix)
+            corr = [l for l in All_Characters if l not in fixes]
+           # There are just two fundamental operations: If we made a mistake, and
             # we know where we made it, trim the input at that location. The second
             # is when we know we haven't made any mistakes, and just want to append
             # more data.
             if k == EState.Trim:
-                end =  h.op_A.x()
-                similar = [i for i in Seen_Prefixes
-                        if str(arg_prefix[:end]) in i and
-                           len(i) > len(arg_prefix[:end])]
-                fixes = [i[end] for i in similar]
-
-                corr = [l for l in All_Characters if l not in fixes]
                 if not corr: raise Exception('Exhausted attempts: %s' % fixes)
                 # check for line cov here.
-                new_prefix = sprefix[:-1]
                 sols = [self.create_prefix("%s%s" % (new_prefix, new_char))
                         for new_char in corr]
                 return sols
 
             elif k == EState.Append:
                 # An empty comparison at the EOF
-                sols = [self.create_prefix("%s%s" % (sprefix, new_char))
-                        for new_char in All_Characters]
-
+                sols = [self.create_prefix("%s%s" % (new_prefix, new_char))
+                        for new_char in corr]
                 return sols
             else:
                 assert k == EState.Unknown
@@ -123,16 +124,16 @@ class DeepSearch(Prefix):
 
         return []
 
-class WideSearch(DeepSearch):
+class WideSearch(Search):
 
-    def create_prefix(self, myarg):
-        return WideSearch(myarg)
+    def create_prefix(self, myarg): return WideSearch(myarg)
 
     def solve(self, my_traces, i):
         # Fast predictive solutions. Use only known characters to fill in when
         # possible.
         traces = list(reversed(my_traces))
         arg_prefix = self.my_arg
+        sprefix = str(arg_prefix)
         Seen_Prefixes.add(str(arg_prefix))
         sols = []
         while traces:
@@ -140,11 +141,9 @@ class WideSearch(DeepSearch):
             k = self.parsing_state(h, arg_prefix)
             log((config.RandomSeed, i, k, "is tainted",
                 isinstance(h.op_A, tainted.tstr)), 1)
-            sprefix = str(arg_prefix)
             end =  h.op_A.x()
-            similar = [i for i in Seen_Prefixes if str(arg_prefix[:end]) in i
-                       and len(i) > len(arg_prefix[:end])]
-            fixes = [i[end] for i in similar]
+            new_prefix = sprefix[:end]
+            fixes = self.get_previous_fixes(h, sprefix)
 
             cmp_stack = self.comparisons_on_given_char(h, traces)
             opBs = [[t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
@@ -152,8 +151,11 @@ class WideSearch(DeepSearch):
             corr = [i for i in sum(opBs, []) if i and i not in fixes]
 
             if k == EState.Trim:
-                if not corr:
-                    return sols
+                if not corr: return sols
+                chars = sorted(set(corr))
+                for new_char in chars:
+                    sols.append(self.create_prefix("%s%s" % (new_prefix, new_char)))
+                return sols
             elif k == EState.Append:
                 if not corr:
                     # last resort. Use random fill in
@@ -161,12 +163,10 @@ class WideSearch(DeepSearch):
                         (sprefix,random.choice(All_Characters))))
                     traces = [i for i in traces if len(i.opA) == 1]
                     continue
-
-            chars = corr if config.WeightedGeneration else sorted(set(corr))
-            new_prefix = sprefix[:end]
-            for new_char in chars:
-                sols.append(self.create_prefix("%s%s" % (new_prefix, new_char)))
-            return sols
+                chars = sorted(set(corr))
+                for new_char in chars:
+                    sols.append(self.create_prefix("%s%s" % (new_prefix, new_char)))
+                return sols
 
         return []
 

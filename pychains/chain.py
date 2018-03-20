@@ -113,7 +113,8 @@ class DFPrefix(Prefix):
         somewhere and generate a character that conforms to everything until
         then.
         """
-        if not cmp_stack: return [l for l in All_Characters if constraints(l)]
+        if not cmp_stack or config.Dumb_Search:
+            return [[l] for l in All_Characters if constraints(l)]
 
         stack_size = len(cmp_stack)
         lst_positions = list(range(stack_size-1,-1,-1))

@@ -36,3 +36,5 @@ Log_Comparisons = 0
 WeightedGeneration=False
 
 Comparison_Equality_Chain = 3
+
+Dumb_Search = False

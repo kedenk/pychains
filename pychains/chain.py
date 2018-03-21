@@ -4,6 +4,9 @@ import string
 import enum
 import sys
 import re
+import astunparse
+import ast
+from tstr_transformer import TstrTransformer
 
 import tainted
 from tainted import Op, tstr
@@ -813,61 +816,58 @@ class Chain:
 string_literals = set()
 
 
-# TODO those regexes are not perfect, we might want to work on the AST instead
+# TODO the string literals in function calls are currently missed since they are not visited
+# one can extend the transformer to them if needed
 def refactor(code : str):
     global string_literals
     code = "from tainted import tstr\n" + code
-    offset = 0
-    # print(re.findall(r'""".*?"""',code,flags=re.DOTALL))
-    code = re.sub(r'""".*?"""',"", code,flags=re.DOTALL)
+    parsed = ast.parse(code)
+    parsed = TstrTransformer(string_literals).visit(parsed)
+    code = astunparse.unparse(parsed)
 
-    offset = 0
-    for match in (re.finditer(r'(?![a-zA-Z0-9_])str\(.*?\)', code)):
-        string_literal = code[offset + match.regs[0][0]:offset + match.regs[0][1]]
-        add_string_literal(string_literal)
-        code = code[ :offset + match.regs[0][0]] + "tstr(" + string_literal + ")" + code[offset + match.regs[0][1]:]
-        offset += len("tstr()")
-    # print(code)
+    # offset = 0
+    # # print(re.findall(r'""".*?"""',code,flags=re.DOTALL))
+    # code = re.sub(r'""".*?"""',"", code,flags=re.DOTALL)
+    #
+    # offset = 0
+    # for match in (re.finditer(r'(?![a-zA-Z0-9_])str\(.*?\)', code)):
+    #     string_literal = code[offset + match.regs[0][0]:offset + match.regs[0][1]]
+    #     add_string_literal(string_literal)
+    #     code = code[ :offset + match.regs[0][0]] + "tstr(" + string_literal + ")" + code[offset + match.regs[0][1]:]
+    #     offset += len("tstr()")
+    # # print(code)
+    #
+    # offset = 0
+    # for match in (re.finditer(r'''(?x)   # verbose mode
+    #     (?<![\\,r,b])    # not preceded by a backslash
+    #     "          # a literal double-quote
+    #     .*?        # 1-or-more characters
+    #     (?<!\\)    # not preceded by a backslash
+    #     "          # a literal double-quote
+    #     ''', code)):
+    #     string_literal = code[offset + match.regs[0][0]:offset + match.regs[0][1]]
+    #     add_string_literal(string_literal)
+    #     code = code[ :offset + match.regs[0][0]] + "tstr(" + string_literal + ")" + code[offset + match.regs[0][1]:]
+    #     offset += len("tstr()")
+    #
+    # offset = 0
+    # for match in (re.finditer(r"""(?x)   # verbose mode
+    #     (?<![\\,r,b])    # not preceded by a backslash
+    #     '          # a literal double-quote
+    #     .*?        # 1-or-more characters
+    #     (?<!\\)    # not preceded by a backslash
+    #     '          # a literal double-quote
+    #     """, code)):
+    #     string_literal = code[offset + match.regs[0][0]:offset + match.regs[0][1]]
+    #     add_string_literal(string_literal)
+    #     code = code[ :offset + match.regs[0][0]] + "tstr(" + string_literal + ")" + code[offset + match.regs[0][1]:]
+    #     offset += len("tstr()")
 
-    offset = 0
-    for match in (re.finditer(r'''(?x)   # verbose mode
-        (?<![\\,r,b])    # not preceded by a backslash
-        "          # a literal double-quote
-        .*?        # 1-or-more characters
-        (?<!\\)    # not preceded by a backslash
-        "          # a literal double-quote
-        ''', code)):
-        string_literal = code[offset + match.regs[0][0]:offset + match.regs[0][1]]
-        add_string_literal(string_literal)
-        code = code[ :offset + match.regs[0][0]] + "tstr(" + string_literal + ")" + code[offset + match.regs[0][1]:]
-        offset += len("tstr()")
 
-    offset = 0
-    for match in (re.finditer(r"""(?x)   # verbose mode
-        (?<![\\,r,b])    # not preceded by a backslash
-        '          # a literal double-quote
-        .*?        # 1-or-more characters
-        (?<!\\)    # not preceded by a backslash
-        '          # a literal double-quote
-        """, code)):
-        string_literal = code[offset + match.regs[0][0]:offset + match.regs[0][1]]
-        add_string_literal(string_literal)
-        code = code[ :offset + match.regs[0][0]] + "tstr(" + string_literal + ")" + code[offset + match.regs[0][1]:]
-        offset += len("tstr()")
-
-
-    #TODO currently a fast hack to get things running
     with open("module.py","w") as module:
         module.write(code)
     return code
 
-
-#helper function to collect all string literals in the code, filter by certain constraints
-def add_string_literal(string_literal:str):
-    global string_literals
-    string_literal = string_literal.replace("'", "").replace('"', '')
-    if len(string_literal) > 1 and string_literal.isalpha():
-        string_literals.add(string_literal)
 
 
 def make_string_literal_superset():

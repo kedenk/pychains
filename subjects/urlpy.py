@@ -791,7 +791,7 @@ def main(s):
     v =  urlparse(s)
     vv = tuple(repr(i) for i in list(v))
     #scheme, netloc, url, params, query, fragment = v
-    print("scheme:%s, netloc:%s, url:%s, params:%s, query:%s, fragment:%s" % vv)
+    return("scheme:%s, netloc:%s, url:%s, params:%s, query:%s, fragment:%s" % vv)
 
 if __name__ == '__main__':
       print(main(sys.argv[1]))

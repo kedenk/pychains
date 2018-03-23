@@ -452,9 +452,10 @@ class Chain:
                 log(">> %s" % self.sys_args(), 1)
                 v = fn(self.sys_args())
                 self.log_comparisons()
-                o('Arg:', self.sys_args(), 0)
                 solution_stack = my_prefix.continue_valid()
                 if not solution_stack:
+                    print(v)
+                    o('Arg:', self.sys_args(), 0)
                     return v
             except Exception as e:
                 self.seen.add(repr(self.current_prefix.my_arg))

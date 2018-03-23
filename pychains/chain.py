@@ -57,15 +57,12 @@ class Prefix:
     def continue_valid(self):
         return []
 
-class DFPrefix(Prefix):
+class Search(Prefix):
 
     def continue_valid(self):
         if  random.uniform(0,1) > config.Return_Probability:
             return [self.create_prefix(str(self.my_arg) +
                 random.choice(All_Characters))]
-
-    def create_prefix(self, myarg):
-        return DFPrefix(myarg)
 
     def parsing_state(self, h, arg_prefix):
         if h.op_A.x() == len(arg_prefix): return EState.Append
@@ -75,6 +72,16 @@ class DFPrefix(Prefix):
     def comparisons_on_given_char(self, h, cmp_traces):
         return [(i,t) for i,t in enumerate(cmp_traces)
                 if h.op_A.x() == t.op_A.x()]
+
+    def get_previous_fixes(self, h, sprefix):
+        end = h.op_A.x()
+        similar = [i for i in Seen_Prefixes if sprefix[:end] in i and
+                   len(i) > len(sprefix[:end])]
+        return [i[end] for i in similar]
+
+class DeepSearch(Search):
+
+    def create_prefix(self, myarg): return DeepSearch(myarg)
 
     def extract_solutions(self, elt, lst_solutions, flip=False):
         fn = tainted.COMPARE_OPERATORS[elt.op]
@@ -142,11 +149,7 @@ class DFPrefix(Prefix):
             sprefix = str(arg_prefix)
 
             if k == EState.Trim:
-                end =  h.op_A.x()
-                similar = [i for i in Seen_Prefixes
-                        if str(arg_prefix[:end]) in i and
-                           len(i) > len(arg_prefix[:end])]
-                fixes = [i[end] for i in similar]
+                fixes = self.get_previous_fixes(h, sprefix)
 
                 # A character comparison of the *last* char.
                 # This was a character comparison. So collect all
@@ -180,10 +183,9 @@ class DFPrefix(Prefix):
 
         return []
 
-class BFPrefix(DFPrefix):
+class WideSearch(Search):
 
-    def create_prefix(self, myarg):
-        return BFPrefix(myarg)
+    def create_prefix(self, myarg): return WideSearch(myarg)
 
     def solve(self, my_traces, i):
         # Fast predictive solutions. Use only known characters to fill in when
@@ -198,10 +200,7 @@ class BFPrefix(DFPrefix):
             log((config.RandomSeed, i, k, "is tainted",
                 isinstance(h.op_A, tainted.tstr)), 1)
             sprefix = str(arg_prefix)
-            end =  h.op_A.x()
-            similar = [i for i in Seen_Prefixes if str(arg_prefix[:end]) in i
-                       and len(i) > len(arg_prefix[:end])]
-            fixes = [i[end] for i in similar]
+            fixes = self.get_previous_fixes(h, sprefix)
 
             cmp_stack = self.comparisons_on_given_char(h, traces)
             opBs = [[t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
@@ -220,6 +219,7 @@ class BFPrefix(DFPrefix):
                     continue
 
             chars = corr if config.WeightedGeneration else sorted(set(corr))
+            end =  h.op_A.x()
             new_prefix = sprefix[:end]
             for new_char in chars:
                 sols.append(self.create_prefix("%s%s" % (new_prefix, new_char)))
@@ -260,7 +260,7 @@ class Chain:
     def exec_argument(self, fn):
         self.start_i = 0
         # replace interesting things
-        solution_stack = [DFPrefix(config.MyPrefix if config.MyPrefix
+        solution_stack = [DeepSearch(config.MyPrefix if config.MyPrefix
             else random.choice(All_Characters))]
 
         for i in range(self.start_i, config.MaxIter):
@@ -282,7 +282,7 @@ class Chain:
                 if i == config.MaxIter//100 and config.InitiateBFS:
                     print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True)
                     self.arg_at_bfs = self.current_prefix.my_arg
-                    self.current_prefix = BFPrefix(str(self.current_prefix.my_arg))
+                    self.current_prefix = WideSearch(str(self.current_prefix.my_arg))
                     self.initiate_bfs = True
                 self.traces = tainted.Comparisons
                 solution_stack.extend(self.current_prefix.solve(self.traces, i))

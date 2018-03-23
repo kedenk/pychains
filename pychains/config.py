@@ -4,7 +4,7 @@ RandomSeed = int(os.getenv('R') or '0')
 MyPrefix = os.getenv('MY_PREFIX') or None
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = 100000
+MaxIter = 10000
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?

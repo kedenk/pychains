@@ -69,9 +69,11 @@ class Search(Prefix):
         elif len(h.op_A) == 1: return EState.Trim
         else: return EState.Unknown
 
+    def comparisons_at(self, x, cmp_traces):
+        return [(i,t) for i,t in enumerate(cmp_traces) if x == t.op_A.x()]
+
     def comparisons_on_given_char(self, h, cmp_traces):
-        return [(i,t) for i,t in enumerate(cmp_traces)
-                if h.op_A.x() == t.op_A.x()]
+        return self.comparisons_at(h.op_A.x(), cmp_traces)
 
     def get_previous_fixes(self, h, sprefix):
         end = h.op_A.x()
@@ -187,10 +189,39 @@ class WideSearch(Search):
 
     def create_prefix(self, myarg): return WideSearch(myarg)
 
+    def comparison_chain_equal(self, traces):
+        arg = self.my_arg
+        cmp_stack1 = self.comparisons_at(arg[-1].x(), traces)
+        for i_eq in range(config.Comparison_Equality_Chain):
+            cmp_stackx = self.comparisons_at(arg[-(i_eq+2)].x(), traces)
+
+            if len(cmp_stack1) != len(cmp_stackx): return False
+            for i,(_,t1) in enumerate(cmp_stack1):
+                _,tx = cmp_stackx[i]
+                if str(t1.op) != str(tx.op):
+                    return False
+                if not self.predicate_compare(t1, tx):
+                    return False
+        return True
+
+    def predicate_compare(self, t1, tx):
+        if t1.op in [Op.IN, Op.NOT_IN]:
+            x = t1.op_A in t1.op_B
+            y = tx.op_A in tx.op_B
+            return x == y and t1.op_B == tx.op_B
+        elif t1.op in [Op.EQ, Op.NE]:
+            x = t1.op_A == t1.op_B
+            y = tx.op_A == tx.op_B
+            return x == y and t1.op_B == tx.op_B
+        assert False
+
+
+
     def solve(self, my_traces, i):
         # Fast predictive solutions. Use only known characters to fill in when
         # possible.
         traces = list(reversed(my_traces))
+
         arg_prefix = self.my_arg
         Seen_Prefixes.add(str(arg_prefix))
         sols = []
@@ -255,7 +286,13 @@ class Chain:
     def prune(self, solutions):
         # never retry an argument.
         solutions = [s for s in solutions if repr(s.my_arg) not in self.seen]
-        return solutions if self.initiate_bfs else [random.choice(solutions)]
+        if self.initiate_bfs:
+            if hasattr(self.current_prefix, 'first'):
+                return  solutions
+            else:
+                return  [s for s in solutions if not s.comparison_chain_equal(self.traces)]
+        else:
+            return [random.choice(solutions)]
 
     def exec_argument(self, fn):
         self.start_i = 0
@@ -283,12 +320,14 @@ class Chain:
                     print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True)
                     self.arg_at_bfs = self.current_prefix.my_arg
                     self.current_prefix = WideSearch(str(self.current_prefix.my_arg))
+                    self.current_prefix.first = True
                     self.initiate_bfs = True
                 self.traces = tainted.Comparisons
-                solution_stack.extend(self.current_prefix.solve(self.traces, i))
-
-                # prune works on the complete stack
-                solution_stack = self.prune(solution_stack)
+                new_solutions = self.current_prefix.solve(self.traces, i)
+                if self.initiate_bfs:
+                    solution_stack = solution_stack + self.prune(new_solutions)
+                else:
+                    solution_stack = self.prune(new_solutions) + solution_stack
 
                 if not solution_stack:
                     if not self.initiate_bfs:

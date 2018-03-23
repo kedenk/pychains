@@ -31,7 +31,7 @@ InitiateBFS = (os.getenv('BFS') or 'false') in ['true', 'True', '1']
 
 Debug=1
 
-Log_Comparisons = 0
+Log_Comparisons = (os.getenv('LOG_COMPARISONS') or 'false') in ['true', 'True', '1']
 
 WeightedGeneration=False
 

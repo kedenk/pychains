@@ -4,7 +4,7 @@ RandomSeed = int(os.getenv('R') or '0')
 MyPrefix = os.getenv('MY_PREFIX') or None
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = 10000
+MaxIter = int(os.getenv('MAX_ITER') or '10000')
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
@@ -37,4 +37,4 @@ WeightedGeneration=False
 
 Comparison_Equality_Chain = 3
 
-Dumb_Search = False
+Dumb_Search =  (os.getenv('DUMB_SEARCH') or 'false') in ['true', 'True', '1']

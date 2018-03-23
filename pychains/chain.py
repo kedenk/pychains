@@ -66,7 +66,7 @@ class Search(Prefix):
 
     def parsing_state(self, h, arg_prefix):
         if h.op_A.x() == len(arg_prefix): return EState.Append
-        elif len(h.op_A) == 1: return EState.Trim
+        elif len(h.op_A) == 1 and h.op_A.x() == arg_prefix[-1].x(): return EState.Trim
         else: return EState.Unknown
 
     def comparisons_at(self, x, cmp_traces):
@@ -290,7 +290,8 @@ class Chain:
             if hasattr(self.current_prefix, 'first'):
                 return  solutions
             else:
-                return  [s for s in solutions if not s.comparison_chain_equal(self.traces)]
+                return  solutions
+                # return  [s for s in solutions if not s.comparison_chain_equal(self.traces)]
         else:
             return [random.choice(solutions)]
 

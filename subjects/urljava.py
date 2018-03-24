@@ -1,4 +1,5 @@
-import pychains.mystring as mystring
+import string
+from pycore import dataparser as d
 class URL:
     __slots__ = [
             'protocol',
@@ -135,7 +136,7 @@ class URL:
                                 ind += 1
                                 # port can be null according to RFC2396
                                 if (len(nhost) > (ind + 1)):
-                                    port = int(nhost[ind+1:])
+                                    port = d.parse_int(nhost[ind+1:])
                             else:
                                 raise Exception("Invalid authority field: " + authority)
                     else:
@@ -146,7 +147,7 @@ class URL:
                     if (ind >= 0):
                         # port can be null according to RFC2396
                         if (len(host) > (ind + 1)):
-                            port = int(host[ind + 1:])
+                            port = d.parse_int(host[ind + 1:])
                         host = host[0: ind]
             else:
                 host = ""
@@ -197,20 +198,20 @@ class URL:
         if _len < 1:
             return False
         c = protocol[0]
-        v = c in mystring.ascii_letters
-        if c not in mystring.ascii_letters:
+        v = c.in_(string.ascii_letters)
+        if c.in_(string.ascii_letters):
             return False
         i = 1
         while i < _len:
             c = protocol[i]
-            if c not in (mystring.ascii_letters + mystring.digits) and c != '.' and c != '+' and c != '-' :
+            if not c.in_(string.ascii_letters + string.digits) and c != '.' and c != '+' and c != '-' :
                 return False
             i+= 1
         return True
 
     def parseProtocol(self, spec, start, i):
         c = spec[0]
-        if c not in mystring.ascii_letters:
+        if not c.in_(string.ascii_letters):
             raise Exception("no protocol: "+spec)
 
         while spec[i:] != '' and spec[i] != '/':
@@ -218,7 +219,7 @@ class URL:
             if c == ':':
                 s = spec[start: i].lower()
                 return s, i+1
-            elif c not in (mystring.ascii_letters + mystring.digits) and c != '.' and c != '+' and c != '-' :
+            elif not c.in_(string.ascii_letters + string.digits) and c != '.' and c != '+' and c != '-' :
                 raise Exception("no protocol: "+spec)
             i += 1
         raise Exception("no protocol: "+spec)
@@ -253,7 +254,7 @@ class Parts:
 
 def main(arg):
     u = URL(arg)
-    print(u)
+    return(u)
 
 if __name__ == '__main__':
     import sys

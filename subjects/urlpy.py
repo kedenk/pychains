@@ -27,7 +27,7 @@ scenarios for parsing, and for backward compatibility purposes, some
 parsing quirks from older RFCs are retained. The testcases in
 test_urlparse.py provides a good indicator of parsing behavior.
 """
-
+import pycore.dataparser as d
 import sys
 import collections
 
@@ -728,7 +728,7 @@ def splitnport(host, defport=-1):
         host, port = match.group(1, 2)
         try:
             if not port: raise ValueError("no digits")
-            nport = int(port)
+            nport = d.parse_int(port)
         except ValueError:
             nport = None
         return host, nport

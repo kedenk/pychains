@@ -78,6 +78,7 @@ class Search(Prefix):
     def parsing_state(self, h, arg_prefix):
         if h.op_A.x() == len(arg_prefix): return EState.Append
         elif len(h.op_A) == 1 and h.op_A.x() == arg_prefix[-1].x(): return EState.Trim
+        elif len(h.op_A) == 0: return EState.Trim
         else: return EState.Unknown
 
     def comparisons_at(self, x, cmp_traces):

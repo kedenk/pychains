@@ -1,25 +1,42 @@
 SUFFIXES:
-.PRECIOUS: subjects/microjson.py subjects/urltools.py
 
+subjects=microjson urljava urlpy mathexpr
+log=$(addsuffix .log,$(addprefix .o/,$(subjects)))
+.precious:$(log)
+
+python3=python3
 #2>/dev/null
 Q=
 R=1
-extract_json: results/microjson.txt
-	@echo done $@
-
-results/%.txt: subjects/%.py | subjects
-	env R=$(R) python3 pychains/chain.py $< $(Q)
-
-extract_comp_urltools: results/urltools.txt
-	python3 gencmd.py src/pygen-ex/pygen_ex/urltools.py "https://www.hello.world#fragment?q1=1"
-
-subjects/%.py: | subjects
-	wget -c 'https://raw.githubusercontent.com/vrthra/pygen_ex/master/pygen_ex/$*.py' -O $@.tmp
-	mv $@.tmp $@
-
-subjects:; mkdir -p $@
-
 
 help:
-	@echo For microjson:
-	@echo " 	make results/microjson.txt"
+	@echo $(MAKE) $(addprefix chains.,$(subjects))
+
+clobber:
+	rm -rf .pickled .o .e .tmp
+
+.pickled .o .e:
+	mkdir -p $@
+
+ifdef DUMB_SEARCH
+SEARCH_STRATEGY=DUMB_SEARCH=$(DUMB_SEARCH)
+else
+SEARCH_STRATEGY=
+endif
+
+ifdef PYTHON_OPT
+SPECIALIZATION=PYTHON_OPT=$(PYTHON_OPT)
+else
+SPECIALIZATION=
+endif
+
+
+R=0
+SEED=R=$(R)
+ENV=$(SEED) $(SEARCH_STRATEGY) $(SPECIALIZATION)
+
+.o/%.log: subjects/%.py | .o .e
+	env $(ENV) $(python3) ./bin/mychains.py $< 1> $@.out
+	mv $@.out $@
+
+chains.%: .o/%.log; @:

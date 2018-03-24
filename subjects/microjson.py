@@ -379,5 +379,5 @@ encode = to_json
 
 def main(s):
     result = from_json(s)
-    print(repr(result))
+    return result
 

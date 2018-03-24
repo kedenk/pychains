@@ -184,7 +184,7 @@ def main(s):
     parse = Parser(s)
     # if s in ["a", "b", "c"]:
     #     return
-    print(parse.getValue())
+    return parse.getValue()
 
 if __name__ == "__main__":
     import sys

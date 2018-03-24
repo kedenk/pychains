@@ -5,6 +5,7 @@ log=$(addsuffix .log,$(addprefix .o/,$(subjects)))
 .precious:$(log)
 
 python3=python3
+pip3=pip3
 #2>/dev/null
 Q=
 R=1
@@ -40,3 +41,6 @@ ENV=$(SEED) $(SEARCH_STRATEGY) $(SPECIALIZATION)
 	mv $@.out $@
 
 chains.%: .o/%.log; @:
+
+req:
+	$(pip3) install -r requirements.txt --user

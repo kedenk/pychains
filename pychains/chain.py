@@ -455,7 +455,7 @@ class Chain:
                 self.seen.add(str(self.current_prefix.my_arg))
                 log('Exception %s' % e)
                 if i == config.MaxIter//100 and config.InitiateBFS:
-                    print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True)
+                    print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True, file=sys.stderr)
                     self.arg_at_bfs = self.current_prefix.my_arg
                     self.current_prefix = WideSearch(str(self.current_prefix.my_arg))
                     self.current_prefix.first = True

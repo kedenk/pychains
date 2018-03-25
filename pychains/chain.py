@@ -49,8 +49,6 @@ class EState(enum.Enum):
     # empty string
     EOF = enum.auto()
 
-Seen_Prefixes = set()
-
 class Prefix:
     def __init__(self, myarg):
         self.my_arg = tainted.tstr(str(myarg))
@@ -58,7 +56,7 @@ class Prefix:
     def __repr__(self):
         return repr(self.my_arg)
 
-    def solve(self, my_traces, i):
+    def solve(self, my_traces, i, seen):
         raise NotImplemnted
 
     def create_prefix(self, myarg):
@@ -87,9 +85,9 @@ class Search(Prefix):
     def comparisons_on_given_char(self, h, cmp_traces):
         return self.comparisons_at(h.op_A.x(), cmp_traces)
 
-    def get_previous_fixes(self, h, sprefix):
+    def get_previous_fixes(self, h, sprefix, seen):
         end = h.op_A.x()
-        similar = [i for i in Seen_Prefixes if sprefix[:end] in i and
+        similar = [i for i in seen if sprefix[:end] in i and
                    len(i) > len(sprefix[:end])]
         return [i[end] for i in similar]
 
@@ -149,11 +147,10 @@ class DeepSearch(Search):
                 solutions.append(lst)
         return solutions
 
-    def solve(self, my_traces, i):
+    def solve(self, my_traces, i, seen):
         traces = list(reversed(my_traces))
         arg_prefix = self.my_arg
         # add the prefix to seen.
-        Seen_Prefixes.add(str(arg_prefix))
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
         while traces:
@@ -163,7 +160,7 @@ class DeepSearch(Search):
             sprefix = str(arg_prefix)
 
             if k == EState.Trim:
-                fixes = self.get_previous_fixes(h, sprefix)
+                fixes = self.get_previous_fixes(h, sprefix, seen)
 
                 # A character comparison of the *last* char.
                 # This was a character comparison. So collect all
@@ -241,12 +238,11 @@ class PythonSpecificDeepSearch(DeepSearch):
             return (-1, EState.Unknown, (h, last_char_added))
 
 
-    def solve(self, my_traces, i):
+    def solve(self, my_traces, i, seen):
         traces = list(reversed(my_traces))
         arg_prefix = self.my_arg
         # add the prefix to seen.
         sprefix = str(arg_prefix)
-        Seen_Prefixes.add(sprefix)
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
         last_char_added = arg_prefix[-1]
@@ -265,7 +261,7 @@ class PythonSpecificDeepSearch(DeepSearch):
                 # comparisons made using this character. until the
                 # first comparison that was made otherwise.
                 # Now, try to fix the last failure
-                fixes = self.get_previous_fixes(h, sprefix)
+                fixes = self.get_previous_fixes(h, sprefix, seen)
                 cmp_stack = self.comparisons_on_given_char(h, traces)
                 if str(h.op_A) == last_char_added and o in CmpSet:
                     # Now, try to fix the last failure
@@ -357,13 +353,12 @@ class WideSearch(Search):
 
 
 
-    def solve(self, my_traces, i):
+    def solve(self, my_traces, i, seen):
         # Fast predictive solutions. Use only known characters to fill in when
         # possible.
         traces = list(reversed(my_traces))
 
         arg_prefix = self.my_arg
-        Seen_Prefixes.add(str(arg_prefix))
         sols = []
         while traces:
             h, *ltrace = traces
@@ -371,7 +366,7 @@ class WideSearch(Search):
             log((config.RandomSeed, i, k, "is tainted",
                 isinstance(h.op_A, tainted.tstr)), 1)
             sprefix = str(arg_prefix)
-            fixes = self.get_previous_fixes(h, sprefix)
+            fixes = self.get_previous_fixes(h, sprefix, seen)
 
             cmp_stack = self.comparisons_on_given_char(h, traces)
             opBs = [[t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
@@ -457,7 +452,7 @@ class Chain:
                 if not solution_stack:
                     return (self.sys_args(), v)
             except Exception as e:
-                self.seen.add(repr(self.current_prefix.my_arg))
+                self.seen.add(str(self.current_prefix.my_arg))
                 log('Exception %s' % e)
                 if i == config.MaxIter//100 and config.InitiateBFS:
                     print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True)
@@ -466,7 +461,7 @@ class Chain:
                     self.current_prefix.first = True
                     self.initiate_bfs = True
                 self.traces = tainted.Comparisons
-                new_solutions = self.current_prefix.solve(self.traces, i)
+                new_solutions = self.current_prefix.solve(self.traces, i, self.seen)
                 if self.initiate_bfs:
                     solution_stack = solution_stack + self.prune(new_solutions)
                 else:

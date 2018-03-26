@@ -475,6 +475,7 @@ class Chain:
                 log('Exception %s' % e)
                 self.traces = list(reversed(tainted.Comparisons))
                 sim_len = self.current_prefix.get_comparison_len(self.traces)
+                self.current_prefix.sim_length = sim_len
                 if not self.initiate_bfs and sim_len > config.Wide_Trigger:
                     print("Wide", sim_len, len(solution_stack), flush=True)
                     print('Wide: %s' % repr(self.current_prefix.my_arg), flush=True, file=sys.stderr)
@@ -493,7 +494,14 @@ class Chain:
                 if self.initiate_bfs:
                     solution_stack = solution_stack + self.prune(new_solutions)
                 else:
-                    solution_stack = self.prune(new_solutions) # + solution_stack
+                    my_len = float('Inf')
+                    choice = self.prune(new_solutions)
+                    for i in choice + solution_stack:
+                        sim_len = i.sim_length if hasattr(i, 'sim_length') else float('Inf')
+                        if sim_len < my_len:
+                            my_len = sim_len
+                            choice = [i]
+                    solution_stack = choice
 
                 if not solution_stack:
                     if not self.initiate_bfs:

@@ -150,6 +150,7 @@ class DeepSearch(Search):
     def solve(self, my_traces, i, seen):
         traces = list(reversed(my_traces))
         arg_prefix = self.my_arg
+        sprefix = str(arg_prefix)
         # add the prefix to seen.
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
@@ -157,11 +158,11 @@ class DeepSearch(Search):
             h, *ltrace = traces
             k = self.parsing_state(h, arg_prefix)
             log((config.RandomSeed, i, k, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
-            sprefix = str(arg_prefix)
+            end =  h.op_A.x()
+            new_prefix = sprefix[:end]
+            fixes = self.get_previous_fixes(h, sprefix, seen)
 
             if k == EState.Trim:
-                fixes = self.get_previous_fixes(h, sprefix, seen)
-
                 # A character comparison of the *last* char.
                 # This was a character comparison. So collect all
                 # comparisons made using this character. until the
@@ -172,25 +173,22 @@ class DeepSearch(Search):
                 corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
                 if not corr: raise Exception('Exhausted attempts: %s' % fixes)
                 # check for line cov here.
-                chars = sum(corr, [])
-                chars = chars if config.WeightedGeneration else sorted(set(chars))
-                new_prefix = sprefix[:-1]
-                sols = [self.create_prefix("%s%s" % (new_prefix, new_char))
-                        for new_char in chars]
-                return sols
+                chars = sorted(set(sum(corr, [])))
 
             elif k == EState.Append:
+                assert new_prefix == sprefix
+                assert len(fixes) == 0
                 # An empty comparison at the EOF
-                sols = [self.create_prefix("%s%s" % (sprefix, new_char))
-                        for new_char in All_Characters]
-
-                return sols
+                chars = All_Characters
             else:
                 assert k == EState.Unknown
                 # Unknown what exactly happened. Strip the last and try again
                 # try again.
                 traces = ltrace
                 continue
+
+            return [self.create_prefix("%s%s" % (new_prefix, new_char))
+                    for new_char in chars]
 
         return []
 

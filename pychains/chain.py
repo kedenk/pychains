@@ -79,6 +79,17 @@ class Search(Prefix):
         elif len(h.op_A) == 0: return EState.Trim
         else: return EState.Unknown
 
+    def predicate_compare(self, t1, tx):
+        if t1.op in [Op.IN, Op.NOT_IN]:
+            x = t1.op_A in t1.op_B
+            y = tx.op_A in tx.op_B
+            return x == y and t1.op_B == tx.op_B
+        elif t1.op in [Op.EQ, Op.NE]:
+            x = t1.op_A == t1.op_B
+            y = tx.op_A == tx.op_B
+            return x == y and t1.op_B == tx.op_B
+        assert False
+
     def comparisons_at(self, x, cmp_traces):
         return [(i,t) for i,t in enumerate(cmp_traces) if x == t.op_A.x()]
 
@@ -90,6 +101,30 @@ class Search(Prefix):
         similar = [i for i in seen if sprefix[:end] in i and
                    len(i) > len(sprefix[:end])]
         return [i[end] for i in similar]
+
+    def get_comparison_len(self, traces):
+        # how many of the last characters added had same comparisons?
+        arg_prefix = self.my_arg
+        sols = []
+        while traces:
+            h, *ltrace = traces
+            k = self.parsing_state(h, arg_prefix)
+            if k == EState.Append:
+                cmp0 = self.comparisons_at(arg_prefix[-1].x(), traces)
+                end = h.op_A.x()-2
+                for i in range(end, 0, -1):
+                    cmpi = self.comparisons_at(arg_prefix[i].x(), traces)
+                    if len(cmp0) != len(cmpi): return end - i
+                    for (_,p1), (_,p2) in zip(cmp0, cmpi):
+                        if not self.predicate_compare(p1, p2):
+                            return end - i
+                return end
+            elif k == EState.Trim:
+                return 1
+            elif k == EState.Unknown:
+                continue
+        return -1
+
 
 class DeepSearch(Search):
 
@@ -147,8 +182,7 @@ class DeepSearch(Search):
                 solutions.append(lst)
         return solutions
 
-    def solve(self, my_traces, i, seen):
-        traces = list(reversed(my_traces))
+    def solve(self, traces, i, seen):
         arg_prefix = self.my_arg
         sprefix = str(arg_prefix)
         # add the prefix to seen.
@@ -177,7 +211,7 @@ class DeepSearch(Search):
 
             elif k == EState.Append:
                 assert new_prefix == sprefix
-                assert len(fixes) == 0
+                #assert len(fixes) == 0
                 # An empty comparison at the EOF
                 chars = All_Characters
             else:
@@ -236,8 +270,7 @@ class PythonSpecificDeepSearch(DeepSearch):
             return (-1, EState.Unknown, (h, last_char_added))
 
 
-    def solve(self, my_traces, i, seen):
-        traces = list(reversed(my_traces))
+    def solve(self, traces, i, seen):
         arg_prefix = self.my_arg
         # add the prefix to seen.
         sprefix = str(arg_prefix)
@@ -338,23 +371,11 @@ class WideSearch(Search):
                     return False
         return True
 
-    def predicate_compare(self, t1, tx):
-        if t1.op in [Op.IN, Op.NOT_IN]:
-            x = t1.op_A in t1.op_B
-            y = tx.op_A in tx.op_B
-            return x == y and t1.op_B == tx.op_B
-        elif t1.op in [Op.EQ, Op.NE]:
-            x = t1.op_A == t1.op_B
-            y = tx.op_A == tx.op_B
-            return x == y and t1.op_B == tx.op_B
-        assert False
 
 
-
-    def solve(self, my_traces, i, seen):
+    def solve(self, traces, i, seen):
         # Fast predictive solutions. Use only known characters to fill in when
         # possible.
-        traces = list(reversed(my_traces))
 
         arg_prefix = self.my_arg
         sols = []
@@ -452,18 +473,27 @@ class Chain:
             except Exception as e:
                 self.seen.add(str(self.current_prefix.my_arg))
                 log('Exception %s' % e)
-                if i == config.MaxIter//100 and config.InitiateBFS:
-                    print('BFS: %s' % repr(self.current_prefix.my_arg), flush=True, file=sys.stderr)
+                self.traces = list(reversed(tainted.Comparisons))
+                sim_len = self.current_prefix.get_comparison_len(self.traces)
+                if not self.initiate_bfs and sim_len > config.Wide_Trigger:
+                    print("Wide", sim_len, len(solution_stack), flush=True)
+                    print('Wide: %s' % repr(self.current_prefix.my_arg), flush=True, file=sys.stderr)
                     self.arg_at_bfs = self.current_prefix.my_arg
                     self.current_prefix = WideSearch(str(self.current_prefix.my_arg))
                     self.current_prefix.first = True
                     self.initiate_bfs = True
-                self.traces = tainted.Comparisons
+                elif self.initiate_bfs and len(solution_stack) > config.Deep_Trigger:
+                    print("Deep", sim_len, len(solution_stack), flush=True)
+                    # choose the most promising - TODO
+                    print('Deep: %s' % repr(self.current_prefix.my_arg), flush=True, file=sys.stderr)
+                    self.current_prefix = DeepSearch(str(self.current_prefix.my_arg))
+                    self.initiate_bfs = False
+
                 new_solutions = self.current_prefix.solve(self.traces, i, self.seen)
                 if self.initiate_bfs:
                     solution_stack = solution_stack + self.prune(new_solutions)
                 else:
-                    solution_stack = self.prune(new_solutions) + solution_stack
+                    solution_stack = self.prune(new_solutions) # + solution_stack
 
                 if not solution_stack:
                     if not self.initiate_bfs:

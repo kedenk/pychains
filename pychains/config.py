@@ -43,3 +43,6 @@ Dumb_Search =  (os.getenv('DUMB_SEARCH') or 'false') in ['true', 'True', '1']
 Python_Specific = (os.getenv('PYTHON_OPT') or 'false') in ['true', '1']
 
 No_CTRL = (os.getenv('NOCTRL') or 'false') in ['true', '1']
+
+Wide_Trigger = 10
+Deep_Trigger = 1000

@@ -477,14 +477,12 @@ class Chain:
                 sim_len = self.current_prefix.get_comparison_len(self.traces)
                 self.current_prefix.sim_length = sim_len
                 if not self.initiate_bfs and sim_len > config.Wide_Trigger:
-                    print("Wide", sim_len, len(solution_stack), flush=True)
                     print('Wide: %s' % repr(self.current_prefix.my_arg), flush=True, file=sys.stderr)
                     self.arg_at_bfs = self.current_prefix.my_arg
                     self.current_prefix = WideSearch(str(self.current_prefix.my_arg))
                     self.current_prefix.first = True
                     self.initiate_bfs = True
                 elif self.initiate_bfs and len(solution_stack) > config.Deep_Trigger:
-                    print("Deep", sim_len, len(solution_stack), flush=True)
                     # choose the most promising - TODO
                     print('Deep: %s' % repr(self.current_prefix.my_arg), flush=True, file=sys.stderr)
                     self.current_prefix = DeepSearch(str(self.current_prefix.my_arg))

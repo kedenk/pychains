@@ -122,6 +122,7 @@ class Search(Prefix):
             elif k == EState.Trim:
                 return 1
             elif k == EState.Unknown:
+                traces = ltrace
                 continue
         return -1
 

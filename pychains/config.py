@@ -47,6 +47,6 @@ Deep_Trigger = 1000
 
 StdErr_DevNull=(os.getenv('NO_LOG') or 'false') in {'true', '1'}
 if StdErr_DevNull:
-    import os
     f = open(os.devnull, 'w')
+    import sys
     sys.stderr = f

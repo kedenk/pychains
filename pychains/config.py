@@ -38,9 +38,15 @@ Comparison_Equality_Chain = 3
 Dumb_Search =  (os.getenv('DUMB_SEARCH') or 'false') in ['true', 'True', '1']
 
 
-Python_Specific = (os.getenv('PYTHON_OPT') or 'false') in ['true', '1']
+Python_Specific = (os.getenv('PY_OPT') or 'false') in ['true', '1']
 
 No_CTRL = (os.getenv('NOCTRL') or 'false') in ['true', '1']
 
 Wide_Trigger = 10
 Deep_Trigger = 1000
+
+StdErr_DevNull=(os.getenv('NO_LOG') or 'false') in {'true', '1'}
+if config.StdErr_DevNull:
+    import os
+    f = open(os.devnull, 'w')
+    sys.stderr = f

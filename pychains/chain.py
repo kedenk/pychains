@@ -109,7 +109,7 @@ class Search(Prefix):
         while traces:
             h, *ltrace = traces
             k = self.parsing_state(h, arg_prefix)
-            if k == EState.Append:
+            if k == EState.Append or EState.EOF:
                 cmp0 = self.comparisons_at(arg_prefix[-1].x(), traces)
                 end = h.op_A.x()-2
                 for i in range(end, 0, -1):
@@ -124,6 +124,8 @@ class Search(Prefix):
             elif k == EState.Unknown:
                 traces = ltrace
                 continue
+            else:
+                assert False
         return -1
 
 

@@ -43,7 +43,7 @@ Python_Specific = (os.getenv('PY_OPT') or 'false') in ['true', '1']
 No_CTRL = (os.getenv('NOCTRL') or 'false') in ['true', '1']
 
 Wide_Trigger = 10
-Deep_Trigger = 1000
+Deep_Trigger = 10000
 
 StdErr_DevNull=(os.getenv('NO_LOG') or 'false') in {'true', '1'}
 if StdErr_DevNull:

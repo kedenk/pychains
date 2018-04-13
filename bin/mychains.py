@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+sys.path.insert(0, '.')
 import pychains.chain
 import imp
 import taintedstr
@@ -10,7 +11,8 @@ if __name__ == "__main__":
     results = []
     for i in range(times):
         e = pychains.chain.Chain()
-        (a, r) = e.exec_argument(_mod.main)
-        print("Arg:", repr(a), flush=True)
-        print("Eval:", repr(r), flush=True)
-        taintedstr.reset_comparisons()
+        v  = e.exec_argument(_mod.main)
+        if v:
+            (a, r) = v
+            print("Arg:", repr(a), flush=True)
+            print("Eval:", repr(r), flush=True)

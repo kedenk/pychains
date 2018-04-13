@@ -84,7 +84,7 @@ class Search(Prefix):
             x = t1.op_A in t1.op_B
             y = tx.op_A in tx.op_B
             return x == y and t1.op_B == tx.op_B
-        elif t1.op in [Op.EQ, Op.NE]:
+        elif t1.op in [id('__eq__'), id('__ne__')]:
             x = t1.op_A == t1.op_B
             y = tx.op_A == tx.op_B
             return x == y and t1.op_B == tx.op_B
@@ -128,16 +128,29 @@ class Search(Prefix):
                 assert False
         return -1
 
+COMPARE_OPERATORS = {
+        id('__eq__'): lambda x, y: x == y,
+        id('__ne__'): lambda x, y: x != y,
+        id('__in_'): lambda x, y: x in y,
+}
+
+def get_op(o):
+    v = COMPARE_OPERATORS[o]
+    if not v:
+        print('No def for ', o, file=sys.stderr)
+        assert False
+    return v
+
 
 class DeepSearch(Search):
 
     def create_prefix(self, myarg): return DeepSearch(myarg)
 
     def extract_solutions(self, elt, lst_solutions, flip=False):
-        fn = tainted.COMPARE_OPERATORS[elt.op]
-        result = fn(str(elt.op_A), str(elt.op_B))
+        fn = get_op(elt.op)
+        result = elt.r
         if isinstance(elt.op_B, str) and len(elt.op_B) == 0:
-            assert Op(elt.op) in [Op.EQ, Op.NE]
+            assert elt.op in [id('__eq__'), id('__ne__')]
             return lst_solutions
         else:
             myfn = fn if not flip else lambda a, b: not fn(a, b)
@@ -391,7 +404,7 @@ class WideSearch(Search):
             fixes = self.get_previous_fixes(h, sprefix, seen)
 
             cmp_stack = self.comparisons_on_given_char(h, traces)
-            opBs = [[t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
+            opBs = [[t.opB] if t.op in [id('__eq__'), id('__ne__')] else t.opB
                     for i, t in cmp_stack]
             corr = [i for i in sum(opBs, []) if i and i not in fixes]
 
@@ -465,7 +478,6 @@ class Chain:
             my_prefix, *solution_stack = solution_stack
             self.apply_prefix(my_prefix)
             self.start_i = i
-            tainted.Comparisons = []
             try:
                 log(">> %s" % self.sys_args(), 1)
                 v = fn(self.sys_args())
@@ -476,7 +488,7 @@ class Chain:
             except Exception as e:
                 self.seen.add(str(self.current_prefix.my_arg))
                 log('Exception %s' % e)
-                self.traces = list(reversed(tainted.Comparisons))
+                self.traces = list(reversed(self.sys_args().comparisons))
                 sim_len = self.current_prefix.get_comparison_len(self.traces)
                 self.current_prefix.sim_length = sim_len
                 if not self.initiate_bfs and sim_len > config.Wide_Trigger:

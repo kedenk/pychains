@@ -80,7 +80,7 @@ class Search(Prefix):
         else: return EState.Unknown
 
     def predicate_compare(self, t1, tx):
-        if t1.op in [Op.IN, Op.NOT_IN]:
+        if t1.op in [id('in_')]:
             x = t1.op_A in t1.op_B
             y = tx.op_A in tx.op_B
             return x == y and t1.op_B == tx.op_B
@@ -131,7 +131,7 @@ class Search(Prefix):
 COMPARE_OPERATORS = {
         id('__eq__'): lambda x, y: x == y,
         id('__ne__'): lambda x, y: x != y,
-        id('__in_'): lambda x, y: x in y,
+        id('in_'): lambda x, y: x in y,
 }
 
 def get_op(o):

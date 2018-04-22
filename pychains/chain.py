@@ -73,8 +73,7 @@ class Search(Prefix):
             return [self.create_prefix(str(self.my_arg) +
                 random.choice(All_Characters))]
 
-    def parsing_state(self, h_, arg_prefix):
-        h = h_.expand()[-1]
+    def parsing_state(self, h, arg_prefix):
         assert h.op_A.x() <= len(arg_prefix)
         if h.op_A.x() == len(arg_prefix): return EState.Append
         elif len(h.op_A) == 1 and h.op_A.x() == arg_prefix[-1].x(): return EState.Trim
@@ -108,7 +107,8 @@ class Search(Prefix):
         arg_prefix = self.my_arg
         sols = []
         while traces:
-            h, *ltrace = traces
+            h_, *ltrace = traces
+            h = h_.expand()[-1]
             k = self.parsing_state(h, arg_prefix)
             if k == EState.Append or EState.EOF:
                 at_idx0 = arg_prefix[-1].x()
@@ -214,7 +214,8 @@ class DeepSearch(Search):
         # we are assuming a character by character comparison.
         # so get the comparison with the last element.
         while traces:
-            h, *ltrace = traces
+            h_, *ltrace = traces
+            h = h_.expand()[-1]
             k = self.parsing_state(h, arg_prefix)
             log((config.RandomSeed, i, k, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
             end =  h.op_A.x()
@@ -279,9 +280,10 @@ class WideSearch(Search):
         arg_prefix = self.my_arg
         sols = []
         while traces:
-            h, *ltrace = traces
-            end = h.op_A.x()
+            h_, *ltrace = traces
+            h = h_.expand()[-1]
             k = self.parsing_state(h, arg_prefix)
+            end = h.op_A.x()
             log((config.RandomSeed, i, k, "is tainted",
                 isinstance(h.op_A, tainted.tstr)), 1)
             sprefix = str(arg_prefix)

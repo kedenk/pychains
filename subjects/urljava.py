@@ -55,7 +55,6 @@ class URL:
         v = limit if i < 0 else i
         newspec = spec[start:v]
         (protocol, host, port, authority, userInfo, path) =  self.parseURL(newspec)
-        i = spec.find('#', start)
         ref = None
         if i >= 0:
             ref = spec[i + 1:]
@@ -159,9 +158,6 @@ class URL:
             if (authority and len(authority) > 0):
                 path = ""
 
-        if not host:
-            host = ""
-
         # Parse the file path if any
         if (start < limit):
             if (spec[start] == '/') :
@@ -204,7 +200,7 @@ class URL:
         i = 1
         while i < _len:
             c = protocol[i]
-            if not c.in_(string.ascii_letters + string.digits) and c != '.' and c != '+' and c != '-' :
+            if not c.in_(string.ascii_letters + string.digits + '.+-'):
                 return False
             i+= 1
         return True
@@ -219,7 +215,7 @@ class URL:
             if c == ':':
                 s = spec[start: i].lower()
                 return s, i+1
-            elif not c.in_(string.ascii_letters + string.digits) and c != '.' and c != '+' and c != '-' :
+            elif not c.in_(string.ascii_letters + string.digits + '.+-'):
                 raise Exception("no protocol: "+spec)
             i += 1
         raise Exception("no protocol: "+spec)

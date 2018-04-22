@@ -81,21 +81,20 @@ class Search(Prefix):
         else: return EState.Unknown
 
     def predicate_compare(self, t1, tx):
-        if t1.op in [id('in_')]:
+        # should be only Op.EQ
+        if t1.op in [Op.IN]:
             x = t1.op_A in t1.op_B
             y = tx.op_A in tx.op_B
             return x == y and t1.op_B == tx.op_B
-        elif t1.op in [id('__eq__'), id('__ne__')]:
+        elif t1.op in [Op.EQ, Op.NE]:
             x = t1.op_A == t1.op_B
             y = tx.op_A == tx.op_B
             return x == y and t1.op_B == tx.op_B
         assert False
 
     def comparisons_at(self, x, cmp_traces):
-        return [(i,t) for i,t in enumerate(cmp_traces) if x == t.op_A.x()]
-
-    def comparisons_on_given_char(self, h, cmp_traces):
-        return self.comparisons_at(h.op_A.x(), cmp_traces)
+        # we need to get all comparisons that involve x index
+        return [t for t in cmp_traces if x in t.op_A._taint]
 
     def get_previous_fixes(self, h, sprefix, seen):
         end = h.op_A.x()
@@ -109,14 +108,21 @@ class Search(Prefix):
         sols = []
         while traces:
             h, *ltrace = traces
+            # if this fails we have to consider
+            # expanding h.op_A also.
+            assert len(h.op_A._taint) <= 1
             k = self.parsing_state(h, arg_prefix)
             if k == EState.Append or EState.EOF:
-                cmp0 = self.comparisons_at(arg_prefix[-1].x(), traces)
+                at_idx0 = arg_prefix[-1].x()
+                cmp0_ = self.comparisons_at(at_idx0, traces)
+                cmp0 = sum([i.expand() for i in cmp0_ if i.op_A.x() == at_idx0], [])
                 end = h.op_A.x()-2
                 for i in range(end, 0, -1):
-                    cmpi = self.comparisons_at(arg_prefix[i].x(), traces)
+                    at_idxi = arg_prefix[i].x()
+                    cmpi_ = self.comparisons_at(arg_prefix[i].x(), traces)
+                    cmpi = sum([i.expand() for i in cmpi_ if i.op_A.x() == at_idxi], [])
                     if len(cmp0) != len(cmpi): return end - i
-                    for (_,p1), (_,p2) in zip(cmp0, cmpi):
+                    for p1, p2 in zip(cmp0, cmpi):
                         if not self.predicate_compare(p1, p2):
                             return end - i
                 return end
@@ -130,9 +136,9 @@ class Search(Prefix):
         return -1
 
 COMPARE_OPERATORS = {
-        id('__eq__'): lambda x, y: x == y,
-        id('__ne__'): lambda x, y: x != y,
-        id('in_'): lambda x, y: x in y,
+        Op.EQ: lambda x, y: x == y,
+        Op.NE: lambda x, y: x != y,
+        Op.IN: lambda x, y: x in y,
 }
 
 def get_op(o):
@@ -147,19 +153,24 @@ class DeepSearch(Search):
 
     def create_prefix(self, myarg): return DeepSearch(myarg)
 
-    def extract_solutions(self, elt, lst_solutions, flip=False):
-        fn = get_op(elt.op)
-        result = elt.r
-        if isinstance(elt.op_B, str) and len(elt.op_B) == 0:
-            assert elt.op in [id('__eq__'), id('__ne__')]
-            return lst_solutions
-        else:
-            myfn = fn if not flip else lambda a, b: not fn(a, b)
-            fres = lambda x: x if result else not x
-            return [c for c in lst_solutions
-                    if fres(myfn(str(c), str(elt.op_B)))]
+    def extract_solutions(self, lelt, lst_solutions, at_idx, flip=False):
+        comparisons = [i for i in lelt.expand() if i.op_A.x() == at_idx]
+        if not comparisons: return lst_solutions
+        solutions = set()
+        for elt in comparisons:
+            fn = get_op(elt.op)
+            result = elt.r
+            if isinstance(elt.op_B, str) and len(elt.op_B) == 0:
+                assert elt.op in [Op.EQ]
+                solutions.update(lst_solutions)
+            else:
+                myfn = fn if not flip else lambda a, b: not fn(a, b)
+                fres = lambda x: x if result else not x
+                lst = {c for c in lst_solutions if fres(myfn(str(c), str(elt.op_B)))}
+                solutions.update(lst)
+        return solutions
 
-    def get_lst_solutions_at_divergence(self, cmp_stack, v):
+    def get_lst_solutions_at_divergence(self, cmp_stack, v, at_idx):
         # if we dont get a solution by inverting the last comparison, go one
         # step back and try inverting it again.
         stack_size = len(cmp_stack)
@@ -167,17 +178,17 @@ class DeepSearch(Search):
             # now, we need to skip everything till v
             diverge, *satisfy = cmp_stack[v:]
             lst_solutions = All_Characters
-            for i,elt in reversed(satisfy):
-                lst_solutions = self.extract_solutions(elt, lst_solutions, False)
+            for elt in reversed(satisfy):
+                lst_solutions = self.extract_solutions(elt, lst_solutions, at_idx, False)
             # now we need to diverge here
-            i, elt = diverge
-            lst_solutions = self.extract_solutions(elt, lst_solutions, True)
+            elt = diverge
+            lst_solutions = self.extract_solutions(elt, lst_solutions, at_idx, True)
             if lst_solutions:
                 return lst_solutions
             v += 1
         return []
 
-    def get_corrections(self, cmp_stack, constraints):
+    def get_corrections(self, cmp_stack, constraints, at_idx):
         """
         cmp_stack contains a set of comparions, with the last comparison made
         at the top of the stack, and first at the bottom. Choose a point
@@ -192,8 +203,7 @@ class DeepSearch(Search):
         solutions = []
 
         for point_of_divergence in lst_positions:
-            lst_solutions = self.get_lst_solutions_at_divergence(cmp_stack,
-                    point_of_divergence)
+            lst_solutions = self.get_lst_solutions_at_divergence(cmp_stack, point_of_divergence, at_idx)
             lst = [l for l in lst_solutions if constraints(l)]
             if lst:
                 solutions.append(lst)
@@ -207,6 +217,9 @@ class DeepSearch(Search):
         # so get the comparison with the last element.
         while traces:
             h, *ltrace = traces
+            # if this fails we have to consider
+            # expanding h
+            assert len(h.op_A._taint) <= 1
             k = self.parsing_state(h, arg_prefix)
             log((config.RandomSeed, i, k, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
             end =  h.op_A.x()
@@ -219,9 +232,9 @@ class DeepSearch(Search):
                 # comparisons made using this character. until the
                 # first comparison that was made otherwise.
                 # Now, try to fix the last failure
-                cmp_stack = self.comparisons_on_given_char(h, traces)
+                cmp_stack = self.comparisons_at(end, traces)
                 # Now, try to fix the last failure
-                corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
+                corr = self.get_corrections(cmp_stack, lambda i: i not in fixes, end)
                 if not corr: raise Exception('Exhausted attempts: %s' % fixes)
                 # check for line cov here.
                 chars = sorted(set(sum(corr, [])))
@@ -254,8 +267,8 @@ class WideSearch(Search):
             cmp_stackx = self.comparisons_at(arg[-(i_eq+2)].x(), traces)
 
             if len(cmp_stack1) != len(cmp_stackx): return False
-            for i,(_,t1) in enumerate(cmp_stack1):
-                _,tx = cmp_stackx[i]
+            for i,t1 in enumerate(cmp_stack1):
+                tx = cmp_stackx[i]
                 if str(t1.op) != str(tx.op):
                     return False
                 if not self.predicate_compare(t1, tx):
@@ -278,9 +291,9 @@ class WideSearch(Search):
             sprefix = str(arg_prefix)
             fixes = self.get_previous_fixes(h, sprefix, seen)
 
-            cmp_stack = self.comparisons_on_given_char(h, traces)
-            opBs = [[t.opB] if t.op in [id('__eq__'), id('__ne__')] else t.opB
-                    for i, t in cmp_stack]
+            cmp_stack = self.comparisons_at(h.op_A.x(), traces)
+            opBs = [[t.opB] if t.op in [id("__eq__"), id("__ne__")] else t.opB
+                    for t in cmp_stack]
             corr = [i for i in sum(opBs, []) if i and i not in fixes]
 
             if k == EState.Trim:

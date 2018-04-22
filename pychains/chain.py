@@ -307,7 +307,7 @@ class WideSearch(Search):
                     # last resort. Use random fill in
                     sols.append(self.create_prefix("%s%s" %
                         (sprefix,random.choice(All_Characters))))
-                    traces = [i for i in traces if len(i.opA) == 1]
+                    traces = [i for i in traces if len(i.opA) > 0] # ignore '' eq ''
                     continue
 
             chars = corr if config.WeightedGeneration else sorted(set(corr))

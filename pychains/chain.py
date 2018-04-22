@@ -285,15 +285,18 @@ class WideSearch(Search):
         sols = []
         while traces:
             h, *ltrace = traces
+            end = h.op_A.x()
             k = self.parsing_state(h, arg_prefix)
             log((config.RandomSeed, i, k, "is tainted",
                 isinstance(h.op_A, tainted.tstr)), 1)
             sprefix = str(arg_prefix)
             fixes = self.get_previous_fixes(h, sprefix, seen)
 
-            cmp_stack = self.comparisons_at(h.op_A.x(), traces)
-            opBs = [[t.opB] if t.op in [id("__eq__"), id("__ne__")] else t.opB
-                    for t in cmp_stack]
+            cmp_stack = self.comparisons_at(end, traces)
+            tainted_cmp = sum([[j for j in t.expand() if j.op_A.x() == end]
+                for t in cmp_stack], [])
+            opBs = [[t.opB] if t.op in [Op.EQ, Op.NE] else t.opB
+                    for t in tainted_cmp]
             corr = [i for i in sum(opBs, []) if i and i not in fixes]
 
             if k == EState.Trim:
@@ -308,7 +311,6 @@ class WideSearch(Search):
                     continue
 
             chars = corr if config.WeightedGeneration else sorted(set(corr))
-            end =  h.op_A.x()
             new_prefix = sprefix[:end]
             for new_char in chars:
                 sols.append(self.create_prefix("%s%s" % (new_prefix, new_char)))
@@ -376,7 +378,7 @@ class Chain:
                 self.traces = list(reversed(self.sys_args().comparisons))
                 sim_len = self.current_prefix.get_comparison_len(self.traces)
                 self.current_prefix.sim_length = sim_len
-                if not self.initiate_bfs and sim_len > config.Wide_Trigger:
+                if not self.initiate_bfs and sim_len > config.Wide_Trigger or len(self.sys_args()) % config.Wide_Trigger == 0:
                     print('Wide: %s' % repr(self.current_prefix.my_arg), flush=True, file=sys.stderr)
                     self.arg_at_bfs = self.current_prefix.my_arg
                     self.current_prefix = WideSearch(str(self.current_prefix.my_arg))

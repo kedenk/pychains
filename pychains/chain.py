@@ -73,7 +73,8 @@ class Search(Prefix):
             return [self.create_prefix(str(self.my_arg) +
                 random.choice(All_Characters))]
 
-    def parsing_state(self, h, arg_prefix):
+    def parsing_state(self, h_, arg_prefix):
+        h = h_.expand()[-1]
         assert h.op_A.x() <= len(arg_prefix)
         if h.op_A.x() == len(arg_prefix): return EState.Append
         elif len(h.op_A) == 1 and h.op_A.x() == arg_prefix[-1].x(): return EState.Trim
@@ -108,9 +109,6 @@ class Search(Prefix):
         sols = []
         while traces:
             h, *ltrace = traces
-            # if this fails we have to consider
-            # expanding h.op_A also.
-            assert len(h.op_A._taint) <= 1
             k = self.parsing_state(h, arg_prefix)
             if k == EState.Append or EState.EOF:
                 at_idx0 = arg_prefix[-1].x()
@@ -217,9 +215,6 @@ class DeepSearch(Search):
         # so get the comparison with the last element.
         while traces:
             h, *ltrace = traces
-            # if this fails we have to consider
-            # expanding h
-            assert len(h.op_A._taint) <= 1
             k = self.parsing_state(h, arg_prefix)
             log((config.RandomSeed, i, k, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
             end =  h.op_A.x()
@@ -378,7 +373,7 @@ class Chain:
                 self.traces = list(reversed(self.sys_args().comparisons))
                 sim_len = self.current_prefix.get_comparison_len(self.traces)
                 self.current_prefix.sim_length = sim_len
-                if not self.initiate_bfs and sim_len > config.Wide_Trigger or len(self.sys_args()) % config.Wide_Trigger == 0:
+                if not self.initiate_bfs and sim_len > config.Wide_Trigger:
                     print('Wide: %s' % repr(self.current_prefix.my_arg), flush=True, file=sys.stderr)
                     self.arg_at_bfs = self.current_prefix.my_arg
                     self.current_prefix = WideSearch(str(self.current_prefix.my_arg))

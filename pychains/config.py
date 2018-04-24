@@ -47,3 +47,5 @@ if StdErr_DevNull:
     f = open(os.devnull, 'w')
     import sys
     sys.stderr = f
+
+Fast = True

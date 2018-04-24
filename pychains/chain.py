@@ -168,14 +168,14 @@ class DeepSearch(Search):
                 solutions.update(lst)
         return solutions
 
-    def get_lst_solutions_at_divergence(self, cmp_stack, v, at_idx):
+    def get_lst_solutions_at_divergence(self, cmp_stack, v, at_idx, continuations):
         # if we dont get a solution by inverting the last comparison, go one
         # step back and try inverting it again.
         stack_size = len(cmp_stack)
         while v < stack_size:
             # now, we need to skip everything till v
             diverge, *satisfy = cmp_stack[v:]
-            lst_solutions = All_Characters
+            lst_solutions = continuations
             for elt in reversed(satisfy):
                 lst_solutions = self.extract_solutions(elt, lst_solutions, at_idx, False)
             # now we need to diverge here
@@ -186,7 +186,7 @@ class DeepSearch(Search):
             v += 1
         return []
 
-    def get_corrections(self, cmp_stack, constraints, at_idx):
+    def get_corrections(self, cmp_stack, continuations, at_idx):
         """
         cmp_stack contains a set of comparions, with the last comparison made
         at the top of the stack, and first at the bottom. Choose a point
@@ -194,17 +194,16 @@ class DeepSearch(Search):
         then.
         """
         if not cmp_stack or config.Dumb_Search:
-            return [[l] for l in All_Characters if constraints(l)]
+            return [[l] for l in continuations]
 
         stack_size = len(cmp_stack)
         lst_positions = list(range(stack_size-1,-1,-1))
         solutions = []
 
         for point_of_divergence in lst_positions:
-            lst_solutions = self.get_lst_solutions_at_divergence(cmp_stack, point_of_divergence, at_idx)
-            lst = [l for l in lst_solutions if constraints(l)]
-            if lst:
-                solutions.append(lst)
+            lst_solutions = self.get_lst_solutions_at_divergence(cmp_stack, point_of_divergence, at_idx, continuations)
+            if lst_solutions:
+                solutions.append(lst_solutions)
         return solutions
 
     def solve(self, traces, i, seen):
@@ -221,6 +220,7 @@ class DeepSearch(Search):
             end =  h.op_A.x()
             new_prefix = sprefix[:end]
             fixes = self.get_previous_fixes(h, sprefix, seen)
+            continuations = [l for l in All_Characters if i not in fixes]
 
             if k == EState.Trim:
                 # A character comparison of the *last* char.
@@ -230,7 +230,7 @@ class DeepSearch(Search):
                 # Now, try to fix the last failure
                 cmp_stack = self.comparisons_at(end, traces)
                 # Now, try to fix the last failure
-                corr = self.get_corrections(cmp_stack, lambda i: i not in fixes, end)
+                corr = self.get_corrections(cmp_stack, continuations, end)
                 if not corr: raise Exception('Exhausted attempts: %s' % fixes)
                 # check for line cov here.
                 chars = sorted(set(sum(corr, [])))

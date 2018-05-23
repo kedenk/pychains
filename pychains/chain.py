@@ -200,7 +200,8 @@ class DeepSearch(Search):
         lst_positions = list(range(stack_size-1,-1,-1))
         solutions = []
 
-        if config.Fast: lst_positions = random.shuffle(lst_positions)
+        if config.Fast:
+            random.shuffle(lst_positions)
 
         for point_of_divergence in lst_positions:
             lst_solutions = self.get_lst_solutions_at_divergence(cmp_stack, point_of_divergence, at_idx, continuations)

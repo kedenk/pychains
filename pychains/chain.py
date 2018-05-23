@@ -166,7 +166,7 @@ class DeepSearch(Search):
                 fres = lambda x: x if result else not x
                 lst = {c for c in lst_solutions if fres(myfn(str(c), str(elt.op_B)))}
                 solutions.update(lst)
-        return solutions
+        return list(solutions)
 
     def get_lst_solutions_at_divergence(self, cmp_stack, v, at_idx, continuations):
         # if we dont get a solution by inverting the last comparison, go one

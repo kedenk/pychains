@@ -8,7 +8,7 @@ MaxIter = int(os.getenv('MAX_ITER') or '10000')
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
-Return_Probability =  float(os.getenv('MY_RP') or '1.0')
+Return_Probability = float(os.getenv('MY_RP') or '1.00')
 
 # The sampling distribution from which the characters are chosen.
 Distribution='U'
@@ -38,7 +38,8 @@ Comparison_Equality_Chain = 3
 Dumb_Search =  (os.getenv('DUMB_SEARCH') or 'false') in ['true', 'True', '1']
 
 
-Python_Specific = (os.getenv('PY_OPT') or 'false') in ['true', '1']
+Python_Specific = False #(os.getenv('PY_OPT') or 'false') in ['true', '1']
+Bytecode_Specific = True
 
 No_CTRL = (os.getenv('NOCTRL') or 'false') in ['true', '1']
 

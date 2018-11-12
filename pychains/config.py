@@ -1,10 +1,12 @@
 import os
+import enum
+
 RandomSeed = int(os.getenv('R') or '0')
 
 MyPrefix = os.getenv('MY_PREFIX') or None
 
 #  Maximum iterations of fixing exceptions that we try before giving up.
-MaxIter = int(os.getenv('MAX_ITER') or '10000')
+MaxIter = int(os.getenv('MAX_ITER') or '1000')
 
 # When we get a non exception producing input, what should we do? Should
 # we return immediately or try to make the input larger?
@@ -40,6 +42,15 @@ Dumb_Search =  (os.getenv('DUMB_SEARCH') or 'false') in ['true', 'True', '1']
 
 Python_Specific = False #(os.getenv('PY_OPT') or 'false') in ['true', '1']
 Bytecode_Specific = True
+
+
+class TracedType(enum.Enum):
+    STRING = enum.auto(),
+    BYTES = enum.auto(),
+    INT = enum.auto()
+
+
+TYPE_TRACE = TracedType.INT
 
 No_CTRL = (os.getenv('NOCTRL') or 'false') in ['true', '1']
 

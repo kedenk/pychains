@@ -2,20 +2,23 @@ import os.path
 import string
 import enum
 import sys
+import codecs
 
 import taintedstr as tainted
 import datatypes.taintedint as taintint
 import datatypes.taintedbytes as taintbytes
+import python_performance_measurement as perf
 from taintedstr import Op, tstr
 from . import config
 
 import random
 random.seed(config.RandomSeed)
 
-#All_Characters = list(string.ascii_letters + string.digits + string.punctuation) \
-#        if config.No_CTRL else list(string.printable)
+All_Characters = list(string.ascii_letters + string.digits + string.punctuation) \
+        if config.No_CTRL else list(string.printable)
 
-All_Characters = list(string.hexdigits)
+if config.Bytecode_Specific:
+    All_Characters = list(string.hexdigits)
 
 CmpSet = [Op.EQ, Op.NE, Op.IN, Op.NOT_IN]
 
@@ -55,6 +58,9 @@ class EState(enum.Enum):
     # End of string as found using tainting or a comparison with the
     # empty string
     EOF = enum.auto()
+
+    # A Bytes comparison
+    Byte = enum.auto()
 
 class Prefix:
     def __init__(self, myarg):
@@ -255,39 +261,34 @@ class PyEVMSpecificDeepSearch(DeepSearch):
 
     def parsing_state(self, h, arg_prefix):
         # every iteration we add a hexadecimal (2 digits)
-        last_char_added = arg_prefix[-2:]
+        if isinstance(arg_prefix, int):
+            arg_prefix = tstr(arg_prefix)
+        _, _, hex_part = arg_prefix.rpartition('x')
+        last_char_added = taintbytes.tbytes(codecs.decode(hex_part, 'hex'))[-1]
         o = h.op
 
-        if o in [Op.EQ, Op.NE] and h.op_A == h.op_B and h.op_A.x() == last_char_added.x():
-            return (1, EState.Trim, h)
-        if o in [Op.EQ, Op.NE] and h.op_A == h.op_B and h.op_A.x() != last_char_added.x():
-            return (1, EState.Char, h)
-        if o in [Op.EQ, Op.NE] and h.op_A != h.op_B:
-            return (1, EState.Trim, h)
-        if o in [Op.EQ, Op.NE] and isinstance(h.op_B, int) and h.op_A.x() == last_char_added.x():
+        if o in CmpSet and h.op_A.x() == last_char_added.x():
+            # last added byte was wrong -> fix it
+            return (1, EState.Byte, h)
+        if o in CmpSet and h.op_A.x() != last_char_added.x():
+            # some early byte was wrong. trim to that position
             return (1, EState.Trim, h)
         elif h.op_A.x() == len(last_char_added):
             return (1, EState.EOF, h)
         else:
             return (-1, EState.Unknown, (h, last_char_added))
 
+    @perf.performance_measurement
     def get_comparison_len(self, traces):
         # how many of the last characters added had same comparisons?
         arg_prefix = self.my_arg
-        sols = []
+        if isinstance(arg_prefix, int):
+            arg_prefix = tstr(arg_prefix)
         while traces:
             h, *ltrace = traces
             k = self.parsing_state(h, arg_prefix)
-            if k == EState.Append or EState.EOF:
-                cmp0 = self.comparisons_at(arg_prefix[-2].x(), traces)
-                end = h.op_A.x()-2
-                for i in range(end, 0, -1):
-                    cmpi = self.comparisons_at(arg_prefix[i].x(), traces)
-                    if len(cmp0) != len(cmpi): return end - i
-                    for (_,p1), (_,p2) in zip(cmp0, cmpi):
-                        if not self.predicate_compare(p1, p2):
-                            return end - i
-                return end
+            if k == EState.Byte or EState.EOF:
+                return 2
             elif k == EState.Trim:
                 return 2
             elif k == EState.Unknown:
@@ -297,13 +298,19 @@ class PyEVMSpecificDeepSearch(DeepSearch):
                 assert False
         return -1
 
+    def get_random_byte(self):
+        candidates = [self.parseToHexByte(i) for i in range(0, 255, 1)]
+        return random.choice(candidates)
+
+    @perf.performance_measurement
     def solve(self, traces, i, seen):
         arg_prefix = self.my_arg
         # add the prefix to seen.
         sprefix = str(arg_prefix)
         # always two characters are added -> hexadecimal digits
+        if isinstance(arg_prefix, int):
+            arg_prefix = tstr(arg_prefix)
         last_char_added = arg_prefix[-2:]
-
 
         while traces:
             h, *ltrace = traces
@@ -312,21 +319,18 @@ class PyEVMSpecificDeepSearch(DeepSearch):
             idx, k, info = self.parsing_state(h, arg_prefix)
             log((config.RandomSeed, i, idx, k, info, "is tainted", isinstance(h.op_A, tainted.tstr)), 1)
 
-            if k == EState.Char:
+            if k == EState.Byte:
                 # A byte comparison of the *last* byte.
                 # This was a byte comparison. So collect all
                 # comparisons made using this byte. until the
                 # first comparison that was made otherwise.
                 # Now, try to fix the last failure
                 fixes = self.get_previous_fixes(h, sprefix, seen)
+                fragments = self.get_previous_seen_fragments(seen)
                 cmp_stack = self.comparisons_on_given_char(h, traces)
-                if str(h.op_A) == last_char_added and o in CmpSet:
-                    # Now, try to fix the last failure
-                    corr = self.get_corrections(cmp_stack, lambda i: i not in fixes)
-                    if not corr: raise Exception('Exhausted attempts: %s' % fixes)
-                else:
-                    corr = self.get_corrections(cmp_stack, lambda i: True)
-                    fixes = []
+                # Now, try to fix the last failure
+                corr = self.get_corrections(cmp_stack, lambda i: i not in fragments and i not in fixes)
+                if not corr: raise Exception('Exhausted attempts: %s' % fragments)
 
                 prefix = sprefix[:-2]
                 sols = []
@@ -341,64 +345,26 @@ class PyEVMSpecificDeepSearch(DeepSearch):
                 # we need to (1) find where h.op_A._idx is within
                 # sys_args, and trim sys_args to that location, and
                 # add a new character.
-                taints = last_char_added.x() #[t for t in last_char_added._taint]
+                taints = last_char_added.x()
                 fix = sprefix[taints:taints+2]
-                #for t in taints:
-                #    fix += sprefix[t]
-                #    fix += sprefix[t+1]
-                #args = sprefix[:h.op_A.x()] + random.choice([i for i in All_Characters if i != fix])
+                fixes = self.get_previous_fixes(h, sprefix, seen)
+                fragments = self.get_previous_seen_fragments(seen)
 
-                # check, if we have a solution from the trace
-                args = self.parseToHexByte(str(h.op_B))
-                if fix == args:
-                    #  TODO we could also take a solution from the com_stack
-                    cmp_stack = self.comparisons_on_given_char(h, traces)
-                    corrections = self.get_corrections(cmp_stack, lambda i: i != fix)
-                    args = random.choice(corrections).my_arg
-
-
-                if not h.op_B:
+                opB = str(h.op_B)
+                if not opB or fix == self.parseToHexByte(opB) or opB in fixes:
                     # we add always two digits for one byte
-                    args = sprefix[:h.op_A.x()] + random.choice([i for i in All_Characters if i != fix[0]])
-                    args = args + random.choice([i for i in All_Characters if i != fix[0]])
+                    cmp_stack = self.comparisons_on_given_char(h, traces)
+                    corrections = self.get_corrections(cmp_stack, lambda i: i != fix and i not in fixes)
+                    args = random.choice(corrections).my_arg
+                else:
+                    args = self.parseToHexByte(opB)
 
                 args = "%s%s%s" % (sprefix[:taints], args, sprefix[taints+2:])
 
                 # we already know the result for next character
                 sols = [self.create_prefix(args)]
-                return sols # VERIFY - TODO
-
-            elif k == EState.Integer:
-                failed = str(h.op_B)
-                cmp_stack = self.comparisons_on_given_char(h, traces)
-                corrections = self.get_corrections(cmp_stack, lambda i: i != failed)
-                corr = random.choice(corrections)
-                arg = "%s%s" % (sprefix, str(self.parseToHexByte(corr)))
-                sols = [self.create_prefix(arg)]
                 return sols
 
-            elif k == EState.Append:
-                failed = str(h.op_B)
-                cmp_stack = self.comparisons_on_given_char(h, traces)
-                corrections = self.get_corrections(cmp_stack, lambda i: i != failed)
-                sols = [self.create_prefix("%s%s" % (sprefix, i.my_arg)) for i in corrections]
-                return sols
-
-            elif k == EState.String:
-                if o in [Op.IN, Op.NOT_IN]:
-                    opB = self.best_matching_str(str(h.op_A), [str(i) for i in h.op_B])
-                elif o in [Op.EQ, Op.NE]:
-                    opB = str(h.op_B)
-                else:
-                    assert False
-
-
-                #common = os.path.commonprefix([str(h.op_A), opB])
-                #assert str(h.op_B)[len(common)-1] == last_char_added
-                #arg = "%s%s" % (sprefix, str(h.op_B)[len(common):])
-                arg = "%s%s" % (sprefix, str(self.parseToHexByte(opB)))
-                sols = [self.create_prefix(arg)]
-                return sols
             elif k == EState.EOF:
                 # An empty comparison at the EOF
                 sols = []
@@ -420,6 +386,25 @@ class PyEVMSpecificDeepSearch(DeepSearch):
 
         return []
 
+    @perf.performance_measurement
+    def get_previous_fixes(self, h, sprefix, seen):
+        end = h.op_A.x() - 1 # always two digits for one byte
+        similar = [i for i in seen if sprefix[:end] in i and
+                   len(i) > len(sprefix[:end])]
+        return [i[end:end+2] for i in similar]
+
+    @perf.performance_measurement
+    def get_previous_seen_fragments(self, seen):
+        fragments = []
+        for item in seen:
+            for i in range(0, len(item), 2):
+                fragment = item[i:i+2]
+                if fragment not in fragments:
+                    fragments.append(fragment)
+
+        return fragments
+
+    @perf.performance_measurement
     def get_corrections(self, cmp_stack, constraints):
         """
         cmp_stack contains a set of comparions, with the last comparison made
@@ -438,6 +423,12 @@ class PyEVMSpecificDeepSearch(DeepSearch):
             t = cmp[1].opB
             if constraints(t) and t not in solutions:
                 solutions.append(PyEVMSpecificDeepSearch(self.parseToHexByte(t)))
+
+        # if we already exhausted all variables in constraints, randomly choose one
+        if len(solutions) == 0 and len(cmp_stack) > 0:
+            cmp = random.choice(cmp_stack)
+            solutions.append(PyEVMSpecificDeepSearch(self.parseToHexByte(cmp.opB)))
+
         return solutions
 
     def parseToHexByte(self, arg) -> string:
@@ -582,6 +573,7 @@ class PythonSpecificDeepSearch(DeepSearch):
 
         return []
 
+
 class WideSearch(Search):
 
     def create_prefix(self, myarg): return WideSearch(myarg)
@@ -642,6 +634,7 @@ class WideSearch(Search):
 
         return []
 
+
 class Chain:
 
     def __init__(self):
@@ -672,19 +665,17 @@ class Chain:
         solutions = [s for s in solutions if repr(s.my_arg) not in self.seen]
         if self.initiate_bfs:
             if hasattr(self.current_prefix, 'first'):
-                return  solutions
+                return solutions
             else:
-                return  solutions
+                return solutions
                 # return  [s for s in solutions if not s.comparison_chain_equal(self.traces)]
         else:
             return [random.choice(solutions)]
 
+    @perf.performance_measurement
     def exec_argument(self, fn):
         self.start_i = 0
         # replace interesting things
-        # TODO just for testing to get always to hex digits for byte representation
-        #arg = config.MyPrefix if config.MyPrefix else random.choice(All_Characters) + random.choice(All_Characters)
-        # TODO original
         arg = config.MyPrefix if config.MyPrefix else random.choice(All_Characters)
         if config.Python_Specific:
             solution_stack = [PythonSpecificDeepSearch(arg)]
@@ -711,11 +702,16 @@ class Chain:
             except Exception as e:
                 self.seen.add(str(self.current_prefix.my_arg))
                 log('Exception %s' % e)
-                self.traces = list(reversed(tainted.Comparisons))
-                intComparisons = taintint.Comparisons
-                byteComparisons = taintbytes.Comparisons
+                if config.TYPE_TRACE == config.TracedType.STRING:
+                    self.traces = list(reversed(tainted.Comparisons))
+                if config.TYPE_TRACE == config.TracedType.INT:
+                    self.traces = taintint.Comparisons
+                elif config.TYPE_TRACE == config.TracedType.BYTES:
+                    self.traces = taintbytes.Comparisons
+                else:
+                    raise AssertionError("No valid Type_Trace given in config.")
 
-                self.traces = list(reversed(taintint.Comparisons))
+                self.traces = list(reversed(self.traces))
                 sim_len = self.current_prefix.get_comparison_len(self.traces)
                 self.current_prefix.sim_length = sim_len
                 if not self.initiate_bfs and sim_len > config.Wide_Trigger:

@@ -5,3 +5,4 @@
 -e git://github.com/vrthra/taintedstr.git@onlyeq#egg=taintedstr
 -e ../tainteddatatypes
 #-e git://github.com/kedenk/tainteddatatypes.git@onlyeq#egg=tainteddatatypes
+-e git://github.com/kedenk/python-performance-measurement#egg=python-performance-measurement
